@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head lang="zh" title="winkvm">
+    <meta charset="utf-8">
+    <meta name="description" content="WebRTC code samples">
+    <meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1, maximum-scale=1">
+</head>
+<style>
+    body, html {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: black;
+    }
+</style>
+
+<body>
+<div id="container" style="width: 100%;height: 100%">
+    <video id="video" playsinline autoplay style="width: 100%;height:100%;cursor: none"></video>
+    <button id="authSerial" style="display: none"></button>
+</div>
+</body>
+<script src="ch9329.js"></script>
+<script>
+
+    let videoElement = document.getElementById("video");
+    let containerElement = document.getElementById("container");
+    let globalWidth = 1920;
+    let globalHeight = 1080;
+
+    function start(devices) {
+
+        let audioDeviceInfo = undefined;
+        let videoDeviceInfo = undefined;
+        for (let i = 0; i < devices.length; i++) {
+            let deviceInfo = devices[i];
+            let label = deviceInfo.label.toLowerCase();
+            if (label.indexOf("usb video") != -1) {
+                videoDeviceInfo = deviceInfo;
+            }
+            if (label.indexOf("usb digital") != -1) {
+                audioDeviceInfo = deviceInfo;
+            }
+            console.log(deviceInfo)
+        }
+        const constraints = {
+            audio: audioDeviceInfo ? {
+                deviceId: audioDeviceInfo.deviceId,
+                advanced: [{echoCancellation: false}]
+            } : undefined,
+            video: {deviceId: videoDeviceInfo.deviceId, width: {exact: globalWidth}, height: {exact: globalHeight}}
+        };
+        console.log(constraints)
+        navigator.mediaDevices.getUserMedia(constraints).then(
+            stream => {
+                videoElement.srcObject = stream;
+            }
+        ).then(devices).catch(function (e) {
+            console.log(e)
+        });
+    }
+
+    let ch;
+    navigator.serial.getPorts()
+        .then(async function (ports) {
+            let port = ports[0]
+            await port.open({baudRate: 9600});
+            let writer = await port.writable.getWriter();
+            ch = new Ch9329(writer);
+            onopen();
+        })
+
+
+    function onopen() {
+        document.addEventListener('keydown', (event) => {
+            event.preventDefault()
+            ch.keydown(event.keyCode);
+        })
+
+        document.addEventListener('keyup', (event) => {
+            event.preventDefault();
+            ch.keyup(event.keyCode);
+        });
+
+        let wheelSet = {};
+        document.addEventListener('wheel', function (event) {
+            let delta = event.deltaY || event.detail || event.wheelDelta;
+            wheelSet["delta"] = delta;
+        });
+        setInterval(function () {
+            if (wheelSet["delta"]) {
+                ch.mouseScroll(wheelSet["delta"]);
+                wheelSet["delta"] = undefined;
+            }
+        }, 100)
+
+        videoElement.addEventListener('mousemove', (event) => {
+            // let screenWidth = videoElement.videoWidth;
+            // let screenHeight = videoElement.videoHeight;
+            let screenWidth = videoElement.videoWidth;
+            let screenHeight = videoElement.videoHeight;
+            let videoWidth = containerElement.offsetWidth;
+            let videoHeight = containerElement.offsetHeight;
+            ch.mouseMove(screenWidth, screenHeight, videoWidth, videoHeight, event.x, event.y);
+        });
+
+
+        videoElement.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+            if (event.button === 0) { // 标准属性或兼容性属性
+                ch.mouseClickLeft();
+            }
+            if (event.button === 1) { // 标准属性或兼容性属性
+                ch.mouseClickMiddle();
+            }
+            if (event.button === 2) { // 标准属性或兼容性属性
+                ch.mouseClickRight();
+            }
+        });
+        videoElement.addEventListener('contextmenu', (event) => {
+            event.preventDefault();
+        });
+        videoElement.addEventListener('mouseup', (event) => {
+            event.preventDefault();
+            ch.mouseup();
+        });
+
+
+    }
+
+    navigator.mediaDevices.enumerateDevices().then(devices => {
+        start(devices)
+    })
+
+
+</script>
+</html>
