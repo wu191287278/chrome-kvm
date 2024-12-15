@@ -14,12 +14,112 @@
         overflow: hidden;
         background: black;
     }
+
+    /* 工具栏样式 */
+    .floating-toolbar {
+        position: fixed;
+        top: 50%;
+        left: 0;
+        transform: translateY(-50%);
+        background-color: #333;
+        color: white;
+        padding: 10px;
+        border-radius: 0 5px 5px 0;
+        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+        z-index: 1000;
+        transition: transform 0.3s, opacity 0.3s;
+    }
+
+    /* 隐藏的样式 */
+    .floating-toolbar.hidden {
+        transform: translate(-90%, -50%);
+    }
+
+    /* 按钮样式 */
+    .floating-toolbar button {
+        display: block;
+        width: 40px;
+        height: 40px;
+        margin: 5px 0;
+        border: none;
+        background-color: #555;
+        color: white;
+        font-size: 16px;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+
+    .floating-toolbar button:hover {
+        background-color: #777;
+    }
+
+    /* 工具提示文字 */
+    .tooltip {
+        position: absolute;
+        top: 50%;
+        left: 100%;
+        transform: translateY(-50%);
+        background-color: #333;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 3px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s;
+    }
+
+    .floating-toolbar button:hover .tooltip {
+        opacity: 1;
+    }
+
+    /* 显示/隐藏箭头按钮样式 */
+    .toggle-button {
+        width: 30px;
+        height: 30px;
+        margin: 5px 0;
+        border: none;
+        background-color: #555;
+        color: white;
+        font-size: 10px;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+
+    .toggle-button:hover {
+        background-color: #777;
+    }
+
+    /* 隐藏状态时箭头按钮样式 */
+    .floating-toolbar.hidden .toggle-button {
+        position: absolute;
+        top: 50%;
+        left: 100%;
+        transform: translateY(-50%);
+        background-color: #333;
+        width: 10px;
+        height: 20px;
+        font-size: 8px;
+        border-radius: 5px 0 0 5px;
+    }
 </style>
 
 <body>
 <div id="container" style="width: 100%;height: 100%">
-    <video id="video" playsinline autoplay style="width: 100%;height:100%;cursor: none"></video>
+    <video id="video" playsinline autoplay style="width: 100%;height:100%;"></video>
     <button id="authSerial" style="display: none"></button>
+</div>
+<div class="floating-toolbar">
+    <button onclick="window.location.href='settings.html'">
+        ⚙️
+        <span class="tooltip">Settings</span>
+    </button>
+    <button class="toggle-button" onclick="toggleToolbar()">
+        ️⬅
+        <span class="tooltip">Hidden</span>
+    </button>
 </div>
 </body>
 <script src="ch9329.js"></script>
@@ -32,28 +132,29 @@
     let ch;
 
     function start(devices) {
-
-        let audioDeviceInfo = undefined;
-        let videoDeviceInfo = undefined;
-        for (let i = 0; i < devices.length; i++) {
-            let deviceInfo = devices[i];
-            let label = deviceInfo.label.toLowerCase();
-            if (label.indexOf("usb video") != -1) {
-                videoDeviceInfo = deviceInfo;
-            }
-            if (label.indexOf("usb digital") != -1) {
-                audioDeviceInfo = deviceInfo;
-            }
-            console.log(deviceInfo)
+        let settingsStr = window.localStorage.getItem("settings");
+        if (!settingsStr) {
+            window.location.href = "settings.html";
+            return;
         }
-        const constraints = {
-            audio: audioDeviceInfo ? {
-                deviceId: audioDeviceInfo.deviceId,
+
+        let settings = JSON.parse(settingsStr);
+        let video = settings.video;
+        if (!settings.video.deviceId) {
+            return;
+        }
+        let audio = undefined;
+        if (settings.audio.deviceId) {
+            audio = {
+                deviceId: settings.audio.deviceId,
                 advanced: [{echoCancellation: false}]
-            } : undefined,
-            video: {deviceId: videoDeviceInfo.deviceId, width: {exact: globalWidth}, height: {exact: globalHeight}}
+            }
+        }
+
+        const constraints = {
+            audio: audio,
+            video: {deviceId: video.deviceId, width: {exact: globalWidth}, height: {exact: globalHeight}}
         };
-        console.log(constraints)
         navigator.mediaDevices.getUserMedia(constraints).then(
             stream => {
                 videoElement.srcObject = stream;
@@ -62,18 +163,21 @@
             console.log(e)
         });
 
-        navigator.serial.getPorts()
-            .then(async function (ports) {
-                let port = ports[0]
-                await port.open({baudRate: 9600});
-                let writer = await port.writable.getWriter();
-                ch = new Ch9329(writer);
-                onopen();
-            })
+        if (settings.usb.deviceId) {
+            navigator.serial.getPorts()
+                .then(async function (ports) {
+                    let port = ports[parseInt(settings.usb.deviceId)]
+                    await port.open({baudRate: 9600});
+                    let writer = await port.writable.getWriter();
+                    ch = new Ch9329(writer);
+                    open();
+                })
+        }
 
     }
 
-    function onopen() {
+    function open() {
+        videoElement.style.cursor = "none";
         document.addEventListener('keydown', (event) => {
             event.preventDefault()
             ch.keydown(event.keyCode);
@@ -97,8 +201,6 @@
         }, 100)
 
         videoElement.addEventListener('mousemove', (event) => {
-            // let screenWidth = videoElement.videoWidth;
-            // let screenHeight = videoElement.videoHeight;
             let screenWidth = videoElement.videoWidth;
             let screenHeight = videoElement.videoHeight;
             let videoWidth = containerElement.offsetWidth;
@@ -127,13 +229,18 @@
             ch.mouseup();
         });
 
-
     }
 
-    navigator.mediaDevices.enumerateDevices().then(devices => {
-        start(devices)
-    })
-
+    document.addEventListener('DOMContentLoaded', () => {
+        start()
+    });
+    // 切换工具栏的显示和隐藏
+    function toggleToolbar() {
+        const toolbar = document.querySelector('.floating-toolbar');
+        toolbar.classList.toggle('hidden');
+        const toggleButton = toolbar.querySelector('.toggle-button');
+        toggleButton.innerHTML = toolbar.classList.contains('hidden') ? '》' : '⬅';
+    }
 
 </script>
 </html>
