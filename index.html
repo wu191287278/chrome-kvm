@@ -29,6 +29,7 @@
     let containerElement = document.getElementById("container");
     let globalWidth = 1920;
     let globalHeight = 1080;
+    let ch;
 
     function start(devices) {
 
@@ -60,18 +61,17 @@
         ).then(devices).catch(function (e) {
             console.log(e)
         });
+
+        navigator.serial.getPorts()
+            .then(async function (ports) {
+                let port = ports[0]
+                await port.open({baudRate: 9600});
+                let writer = await port.writable.getWriter();
+                ch = new Ch9329(writer);
+                onopen();
+            })
+
     }
-
-    let ch;
-    navigator.serial.getPorts()
-        .then(async function (ports) {
-            let port = ports[0]
-            await port.open({baudRate: 9600});
-            let writer = await port.writable.getWriter();
-            ch = new Ch9329(writer);
-            onopen();
-        })
-
 
     function onopen() {
         document.addEventListener('keydown', (event) => {
