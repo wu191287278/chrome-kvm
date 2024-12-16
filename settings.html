@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>两个选择框表单</title>
+    <title>Settings</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -71,26 +71,32 @@
 <body>
 <div class="form-container">
     <h2>授权设备</h2>
+
+    <div class="separator"></div>
+
     <!-- 第一个选择框 -->
     <form action="javascript:void(0)" method="post">
-        <label for="choice1">视频 (USB 视频采集卡):</label>
+        <label for="choice1">视频 (<a href="http://e.tb.cn/h.TfXLcXooYTXSM4E?tk=XEqJ3xEBB9g" target="_blank">USB 视频采集卡</a>):</label>
         <select id="choice1" name="choice1">
         </select>
         <br>
-        <label for="choice3">音频 (USB 视频采集卡):</label>
+        <label for="choice3">音频 (<a href="http://e.tb.cn/h.TfXLcXooYTXSM4E?tk=XEqJ3xEBB9g" target="_blank">USB 视频采集卡</a>):</label>
         <select id="choice3" name="choice3">
         </select>
         <br>
-        <label for="choice2">串口 (CH9329键鼠控制器):</label>
+        <label for="choice2">串口 (<a href="http://e.tb.cn/h.TfXoUbjkCYXwmeW?tk=7Rlp3xEAdqD" target="_blank">CH9329键鼠控制器</a>) <br>chmod 666 /dev/ttydUSB0:</label>
         <select id="choice2" name="choice2">
         </select>
         <br>
-        <button type="submit" class="confirm-button" onclick="authMedia()">授权音视频</button>
-        <button type="submit" class="confirm-button" onclick="authUsb()">授权控制器</button>
-        <button type="submit" class="confirm-button" onclick="save()">保存</button>
-        <button type="submit" class="confirm-button" onclick="window.location.href='./index.html'">返回</button>
+        <button type="button" class="confirm-button" onclick="authMedia()">授权音视频</button>
+        <button type="button" class="confirm-button" onclick="authUsb()">授权控制器</button>
+        <button type="button" class="confirm-button" onclick="save()">保存</button>
+        <button type="button" class="confirm-button" onclick="window.location.href='./index.html'">返回</button>
     </form>
-
+    <div class="separator"></div>
+    <p id="usedVideo">当前使用的视频设备:</p>
+    <p id="usedAudio">当前使用的音频设备:</p>
+    <p id="usedUsb">当前使用的控制器:</p>
 </div>
 </body>
 <script>
@@ -110,6 +116,13 @@
         navigator.mediaDevices.enumerateDevices().then(devices => {
             let videoSelector = document.querySelector("#choice1");
             let audioSelector = document.querySelector("#choice3");
+            let settingsStr = window.localStorage.getItem("settings");
+            let settings = {};
+            if (settingsStr) {
+                settings = JSON.parse(settingsStr)
+            }
+
+
             for (let i = 0; i < devices.length; i++) {
                 let device = devices[i];
                 let htmlOptionElement = document.createElement("option");
@@ -121,7 +134,12 @@
                 if (device.kind === "videoinput") {
                     videoSelector.appendChild(htmlOptionElement);
                 }
-                console.log(device);
+                if (settings.video && settings.video.deviceId === device.deviceId) {
+                    htmlOptionElement.setAttribute("selected", "selected");
+                }
+                if (settings.audio && settings.audio.deviceId === device.deviceId) {
+                    htmlOptionElement.setAttribute("selected", "selected");
+                }
             }
 
         })
@@ -138,38 +156,73 @@
                     selector.appendChild(htmlOptionElement);
                 }
             })
+            .catch(e => {
+                alert(e.message);
+            })
     }
 
     function save() {
-        let videoSelector = document.querySelector("#choice1");
-        let videoLabel = videoSelector.innerText;
-        let videoDeviceId = videoSelector.value;
+        let choice1 = document.querySelector("#choice1");
+        let video = {}
+        if (choice1.selectedOptions.length > 0) {
+            let videoSelector = choice1.selectedOptions[0];
+            let videoLabel = videoSelector.innerText;
+            let videoDeviceId = videoSelector.value;
+            video.label = videoLabel;
+            video.deviceId = videoDeviceId;
+        }
 
-        let audioSelector = document.querySelector("#choice3");
-        let audioLabel = audioSelector.innerText;
-        let audioDeviceId = audioSelector.value;
+        let choice3 = document.querySelector("#choice3");
+        let audio = {};
+        if (choice3.selectedOptions.length > 0) {
+            let option = choice3.selectedOptions[0];
+            let audioLabel = option.innerText;
+            let audioDeviceId = option.value;
+            audio.label = audioLabel;
+            audio.deviceId = audioDeviceId;
+        }
 
-        let usbSelector = document.querySelector("#choice2");
-        let usbLabel = usbSelector.innerText;
-        let usbDeviceId = usbSelector.value;
+        let usb = {}
+        let usbElement = document.querySelector("#choice2");
+        if (usbElement.selectedOptions.length > 0) {
+            let option = usbElement.selectedOptions[0];
+            let usbLabel = option.innerText;
+            let usbDeviceId = option.value;
+            usb.label = usbLabel;
+            usb.deviceId = usbDeviceId;
+        }
 
         let config = {
-            video: {
-                label: videoLabel,
-                deviceId: videoDeviceId,
-            }, audio: {
-                label: audioLabel,
-                deviceId: audioDeviceId,
-            }, usb: {
-                label: usbLabel,
-                deviceId: usbDeviceId,
-            }
+            video: video, audio: audio, usb: usb
         };
 
         window.localStorage.setItem("settings", JSON.stringify(config));
+        alert("保存成功")
+        window.location.reload();
+    }
+
+    function renderUsed() {
+        let settingStr = window.localStorage.getItem("settings");
+        if (!settingStr) {
+            return;
+        }
+        let settings = JSON.parse(settingStr);
+        let video = settings.video;
+        if (video) {
+            document.querySelector("#usedVideo").innerText = "当前使用的视频设备:\n" + video.label;
+        }
+        let audio = settings.audio;
+        if (audio) {
+            document.querySelector("#usedAudio").innerText = "当前使用的音频设备:\n" + audio.label;
+        }
+        let usb = settings.usb;
+        if (usb) {
+            document.querySelector("#usedUsb").innerText = "当前使用的控制器:\n" + usb.label;
+        }
     }
 
     renderMedia();
     renderUsb();
+    renderUsed();
 </script>
 </html>
