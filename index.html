@@ -172,17 +172,21 @@
                 videoElement.srcObject = stream;
             }
         ).then(devices).catch(function (e) {
-            console.log(e)
+            alert(e.message);
         });
 
         if (settings.usb.deviceId) {
             navigator.serial.getPorts()
                 .then(async function (ports) {
-                    let port = ports[parseInt(settings.usb.deviceId)]
-                    await port.open({baudRate: 9600});
-                    let writer = await port.writable.getWriter();
-                    ch = new Ch9329(writer);
-                    open();
+                    if (ports.length === 0) {
+                        alert("未检测到输入设备,如果有相关设备.可以在授权页面进行授权")
+                    } else {
+                        let port = ports[parseInt(settings.usb.deviceId)]
+                        await port.open({baudRate: 9600});
+                        let writer = await port.writable.getWriter();
+                        ch = new Ch9329(writer);
+                        open();
+                    }
                 })
         }
 
