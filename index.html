@@ -112,6 +112,18 @@
     <button id="authSerial" style="display: none"></button>
 </div>
 <div class="floating-toolbar">
+    <button onclick="toggleFullScreen()">
+        🖥️
+        <span class="tooltip">Full Screen</span>
+    </button>
+    <button onclick="startRecord()" id="startRecordStatus">
+        📹
+        <span class="tooltip">Start record</span>
+    </button>
+    <button onclick="stopRecord()" id="stopRecordStatus" style="display: none">
+        ⏺️
+        <span class="tooltip">Stop record</span>
+    </button>
     <button onclick="window.location.href='settings.html'">
         ⚙️
         <span class="tooltip">Settings</span>
@@ -234,12 +246,77 @@
     document.addEventListener('DOMContentLoaded', () => {
         start()
     });
+
     // 切换工具栏的显示和隐藏
     function toggleToolbar() {
         const toolbar = document.querySelector('.floating-toolbar');
         toolbar.classList.toggle('hidden');
         const toggleButton = toolbar.querySelector('.toggle-button');
         toggleButton.innerHTML = toolbar.classList.contains('hidden') ? '》' : '⬅';
+    }
+
+    function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+            // 进入全屏
+            document.documentElement.requestFullscreen();
+        } else {
+            // 退出全屏
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    }
+
+    let mediaRecorder;
+
+    function startRecord() {
+        document.querySelector("#startRecordStatus").style.display = "none";
+        document.querySelector("#stopRecordStatus").style.display = "block";
+        if (mediaRecorder) {
+            mediaRecorder.stop();
+        }
+        const stream = videoElement.srcObject;
+
+        // 将MediaStream转换为Blob数据
+        mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'video/webm'
+        });
+
+        // 创建一个空数组来保存录制的Blob对象
+        const chunks = [];
+
+        // 监听dataavailable事件来收集Blob数据
+        mediaRecorder.ondataavailable = event => {
+            if (event.data && event.data.size > 0) {
+                chunks.push(event.data);
+            }
+        };
+
+        // 监听stop事件来处理录制完成后的操作
+        mediaRecorder.onstop = () => {
+            // 创建一个Blob URL来播放录制的视频
+            const blob = new Blob(chunks, {type: 'video/webm'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            let date = new Date();
+            a.download = date.getFullYear() + "" + date.getMonth() + "" + date.getDay() + ""
+                + date.getHours() + date.getMinutes() + "" + date.getSeconds() + '.webm';
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        // 开始录制
+        mediaRecorder.start();
+    }
+
+    function stopRecord() {
+        if (mediaRecorder) {
+            mediaRecorder.stop();
+        }
+
+        document.querySelector("#startRecordStatus").style.display = "block";
+        document.querySelector("#stopRecordStatus").style.display = "none";
     }
 
 </script>
