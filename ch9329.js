@@ -104,12 +104,21 @@ function Ch9329(writer) {
     }
 
     this.controlKeyMapping = {
-        // 16: 0xE1,  // LShiftKey
-        // 161: 0xE5,  // RShiftKey
-        // 17: 0xE0,  // LControlKey
-        // 163: 0xE4,  // RControlKey
-        // 18: 0xE2,  // LAlt
-        // 165: 0xE6,  // Ralt
+        16: 0xE1,  // LShiftKey
+        161: 0xE5,  // RShiftKey
+        17: 0xE0,  // LControlKey
+        163: 0xE4,  // RControlKey
+        18: 0xE2,  // LAlt
+        165: 0xE6,  // Ralt
+    }
+
+    this.controlKeyDown = {
+        16: false,  // LShiftKey
+        161: false,  // RShiftKey
+        17: false,  // LControlKey
+        163: false,  // RControlKey
+        18: false,  // LAlt
+        165: false,  // Ralt
     }
 
 
@@ -125,12 +134,30 @@ function Ch9329(writer) {
     this.keydown = function (key) {
         let data = [0x57, 0xAB, 0x00, 0x02, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         let keyCode = this.keyboardMapping[key];
-        if (this.controlKeyMapping[key]) {
-            data[5] = this.controlKeyMapping[key];
+        let index = 7;
+        let items = [];
+        for (const controlKeyDownKey in this.controlKeyDown) {
+            let value = this.controlKeyDown[controlKeyDownKey];
+            if (value) {
+                items.push(this.controlKeyMapping[controlKeyDownKey]);
+            }
+        }
+        if (items.length > 0) {
+            data[5] = items.length;
+            items.push(keyCode);
+            index=7;
+            for (let i = 0; i < items.length; i++) {
+                data[index + i] = items[i];
+            }
         } else {
             data[7] = keyCode;
-            let packet = this.toUnit8Array(data);
-            this.write(packet);
+        }
+
+        let packet = this.toUnit8Array(data);
+        this.write(packet);
+
+        if (this.controlKeyMapping[key]) {
+            this.controlKeyDown[key] = true;
         }
     }
 
@@ -140,8 +167,10 @@ function Ch9329(writer) {
 
     this.keyup = function (key) {
         this.write(this.keyboardReleasePacket);
+        if (this.controlKeyMapping[key]) {
+            this.controlKeyDown[key] = false;
+        }
     }
-
 
     this.mouseClickLeft = function () {
         let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x01, 0x00, 0x00, 0x00];
@@ -199,7 +228,7 @@ function Ch9329(writer) {
         if (detail === 0) {
             return;
         }
-        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, detail > 0 ? 0xFF : 0x01];
+        let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x00, 0x00, 0x00, detail > 0 ? 0xFF : 0x01];
         let packet = this.toUnit8Array(data);
         this.write(packet);
     }
