@@ -44,13 +44,13 @@ Chrome-KVM 基于 Chrome 浏览器开发的 BIOS 级远程控制项目。仅打�
 
 1. 打开该网站：[https://wu191287278.github.io/chrome-kvm/settings.html)
 2. 授权使用视频采集卡
-   ![Intro](./docs/1.png)
+   ![Intro](./docs/1.jpg)
 3. 授权使用键鼠控制器
 4. 选择使用的 视频 USB视频采集卡(一般带有" USB 视频"字样)
 5. 选择使用的 音频 USB视频采集卡(一般带有 "USB 音频" 字样)
 6. 选择使用的 串口设备 (一般带有 "wch" 字样)
-![3.png](docs/3.png)
+![3.png](docs/3.jpg)
 7. 点击 保存，然后点击返回，即可控制PC
    ![Intro](./docs/2.jpg)
 8. 启动系统播放音视频
-![Intro](./docs/4.png)
+![Intro](./docs/4.jpg)
