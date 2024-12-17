@@ -196,12 +196,12 @@
         videoElement.style.cursor = "none";
         document.addEventListener('keydown', (event) => {
             event.preventDefault()
-            ch.keydown(event.keyCode);
+            ch.keydown(event.code);
         })
 
         document.addEventListener('keyup', (event) => {
             event.preventDefault();
-            ch.keyup(event.keyCode);
+            ch.keyup(event.code);
         });
 
         let wheelSet = {};
