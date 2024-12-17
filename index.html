@@ -323,5 +323,15 @@
         document.querySelector("#stopRecordStatus").style.display = "none";
     }
 
+    function paste() {
+         navigator.clipboard.readText()
+             .then(text=>{
+                 for (let lengthKey in text.length) {
+                     ch.keydown(lengthKey);
+                 }
+                 ch.keyup(lengthKey);
+             })
+    }
+
 </script>
 </html>
