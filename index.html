@@ -108,30 +108,30 @@
 </style>
 
 <body>
-<div id="container" style="width: 100%;height: 100%">
+<div id="container" style="width: 100%;height: 100%;cursor: none">
     <video id="video" playsinline autoplay style="width: 100%;height:100%;cursor: none"></video>
     <button id="authSerial" style="display: none"></button>
 </div>
 <div class="floating-toolbar">
     <button onclick="toggleFullScreen()">
         🖥️
-        <span class="tooltip">Full Screen</span>
+        <span class="tooltip">全屏</span>
     </button>
     <button onclick="startRecord()" id="startRecordStatus">
         📹
-        <span class="tooltip">Start record</span>
+        <span class="tooltip">录制</span>
     </button>
     <button onclick="stopRecord()" id="stopRecordStatus" style="display: none">
         ⏺️
-        <span class="tooltip">Stop record</span>
+        <span class="tooltip">停止录制</span>
     </button>
     <button onclick="window.location.href='settings.html'">
         ⚙️
-        <span class="tooltip">Settings</span>
+        <span class="tooltip">设置</span>
     </button>
     <button class="toggle-button" onclick="toggleToolbar()">
         ️⬅
-        <span class="tooltip">Hidden</span>
+        <span class="tooltip">隐藏</span>
     </button>
 </div>
 </body>
@@ -220,8 +220,8 @@
         videoElement.addEventListener('mousemove', (event) => {
             let screenWidth = videoElement.videoWidth;
             let screenHeight = videoElement.videoHeight;
-            let videoWidth = containerElement.offsetWidth;
-            let videoHeight = containerElement.offsetHeight;
+            let videoWidth = videoElement.offsetWidth;
+            let videoHeight = videoElement.offsetHeight;
             ch.mouseMove(screenWidth, screenHeight, videoWidth, videoHeight, event.x, event.y);
         });
 
