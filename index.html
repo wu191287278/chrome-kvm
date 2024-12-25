@@ -129,6 +129,10 @@
         ⚙️
         <span class="tooltip">设置</span>
     </button>
+    <button onclick="ctrlAltDel()">
+        ⚡️
+        <span class="tooltip">Ctrl+Alt+Delete</span>
+    </button>
     <button class="toggle-button" onclick="toggleToolbar()">
         ️⬅
         <span class="tooltip">隐藏</span>
@@ -332,6 +336,11 @@
                  }
                  ch.keyup(lengthKey);
              })
+    }
+
+    function ctrlAltDel(){
+        ch.write(new Uint8Array([87, 171, 0, 2, 8, 4, 0, 224, 226, 76, 0, 0, 0, 30]));
+        ch.keyup()
     }
 
 </script>
