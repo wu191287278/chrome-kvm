@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <title>Chrome KVM</title>
     <meta name="description" content="Chrome KVM">
+    <link rel="manifest" href="manifest.json">
     <meta name="viewport" content="width=device-width, user-scalable=yes, initial-scale=1, maximum-scale=1">
 </head>
 <style>
@@ -342,6 +343,14 @@
         ch.write(new Uint8Array([87, 171, 0, 2, 8, 4, 0, 224, 226, 76, 0, 0, 0, 30]));
         ch.keyup()
     }
-
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./service-worker.js')
+            .then((registration) => {
+                console.log('Service Worker registered with scope:', registration.scope);
+            })
+            .catch((error) => {
+                console.log('Service Worker registration failed:', error);
+            });
+    }
 </script>
 </html>
