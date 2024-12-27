@@ -87,6 +87,21 @@
             视频采集卡</a>):</label>
         <select id="choice3" name="choice3">
         </select>
+        <label for="choice4">屏幕分辨率 (系统内设置的分辨率):</label>
+        <select id="choice4" name="choice1">
+            <option value="1920x1080">1920x1080</option>
+            <option value="4096x2160">4096x2160</option>
+            <option value="3840x2160">3840x2160</option>
+            <option value="1680x1050">1680x1050</option>
+            <option value="800x600">800x600</option>
+            <option value="1280x960">1280x960</option>
+            <option value="1280x1024">1280x1024</option>
+            <option value="1360x768">1360x768</option>
+            <option value="1440x1050">1440x1050</option>
+            <option value="1440x900">1440x900</option>
+            <option value="1600x900">1600x900</option>
+            <option value="1600x1200">1600x1200</option>
+        </select>
         <button type="button" class="confirm-button" onclick="authMedia()">点我授权视频采集卡</button>
         <br>
         <div class="separator"></div>
@@ -95,6 +110,7 @@
             /dev/ttydUSB0</label>
         <select id="choice2" name="choice2">
         </select>
+
         <br>
         <button type="button" class="confirm-button" onclick="authUsb()">点我授权键鼠控制器</button>
         <br>
@@ -162,6 +178,14 @@
                 }
             }
 
+            let resolutionElement = document.querySelector("#choice4");
+            for (let i = 0; i < resolutionElement.options.length; i++) {
+                let option = resolutionElement.options[i];
+                if (option.value === settings.resolution.width + "x" + settings.resolution.height) {
+                    option.setAttribute("selected", "selected");
+                }
+            }
+
         })
     }
 
@@ -174,7 +198,7 @@
                     let info = port.getInfo();
                     let htmlOptionElement = document.createElement("option");
                     htmlOptionElement.setAttribute("value", JSON.stringify(info));
-                    htmlOptionElement.innerText = "usbProductId="+info.usbProductId+","+"usbVendorId="+info.usbVendorId;
+                    htmlOptionElement.innerText = "usbProductId=" + info.usbProductId + "," + "usbVendorId=" + info.usbVendorId;
                     selector.appendChild(htmlOptionElement);
                 }
             })
@@ -213,9 +237,17 @@
             usb.label = usbLabel;
             usb.deviceId = usbDeviceId;
         }
+        let resolution = {width: 1920, height: 1080};
+        let resolutionElement = document.querySelector("#choice4");
+        if (resolutionElement.selectedOptions.length > 0) {
+            let option = resolutionElement.selectedOptions[0];
+            let split = option.value.split("x");
+            resolution.width = parseInt(split[0]);
+            resolution.height = parseInt(split[1]);
+        }
 
         let config = {
-            video: video, audio: audio, usb: usb
+            video: video, audio: audio, usb: usb, resolution: resolution
         };
 
         window.localStorage.setItem("settings", JSON.stringify(config));

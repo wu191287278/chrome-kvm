@@ -169,9 +169,16 @@
             }
         }
 
+        let screen = settings.resolution;
+        let width = globalWidth;
+        let height = globalHeight;
+        if (screen) {
+            width = screen.width;
+            height = screen.height;
+        }
         const constraints = {
             audio: audio,
-            video: {deviceId: video.deviceId, width: {exact: globalWidth}, height: {exact: globalHeight}}
+            video: {deviceId: video.deviceId, width: {exact: width}, height: {exact: height}}
         };
         navigator.mediaDevices.getUserMedia(constraints).then(
             stream => {
@@ -330,21 +337,22 @@
     }
 
     function paste() {
-         navigator.clipboard.readText()
-             .then(text=>{
-                 for (let lengthKey in text.length) {
-                     ch.keydown(lengthKey);
-                 }
-                 ch.keyup(lengthKey);
-             })
+        navigator.clipboard.readText()
+            .then(text => {
+                for (let lengthKey in text.length) {
+                    ch.keydown(lengthKey);
+                }
+                ch.keyup(lengthKey);
+            })
     }
 
-    function ctrlAltDel(){
+    function ctrlAltDel() {
         ch.write(new Uint8Array([87, 171, 0, 2, 8, 4, 0, 224, 226, 76, 0, 0, 0, 30]));
         setTimeout(function () {
             ch.keyup()
-        },10);
+        }, 10);
     }
+
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./service-worker.js')
             .then((registration) => {
