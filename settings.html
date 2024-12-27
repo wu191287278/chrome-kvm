@@ -170,9 +170,11 @@
             .then((ports) => {
                 let selector = document.querySelector("#choice2");
                 for (let i = 0; i < ports.length; i++) {
+                    let port = ports[i];
+                    let info = port.getInfo();
                     let htmlOptionElement = document.createElement("option");
-                    htmlOptionElement.setAttribute("value", i);
-                    htmlOptionElement.innerText = "Serial " + i;
+                    htmlOptionElement.setAttribute("value", JSON.stringify(info));
+                    htmlOptionElement.innerText = "usbProductId="+info.usbProductId+","+"usbVendorId="+info.usbVendorId;
                     selector.appendChild(htmlOptionElement);
                 }
             })
