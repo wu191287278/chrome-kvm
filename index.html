@@ -201,7 +201,7 @@
                         let port = ports[0]
                         await port.open({baudRate: 9600});
                         let writer = await port.writable.getWriter();
-                        ch = new Ch9329(writer);
+                        ch = new Ch9329(writer, settings.mouseClickMode);
                         open();
                     }
                 })

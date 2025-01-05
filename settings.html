@@ -110,6 +110,11 @@
             /dev/ttydUSB0</label>
         <select id="choice2" name="choice2">
         </select>
+        <label for="choice5">鼠标按键模式</label>
+        <select id="choice5" name="choice2">
+            <option value="absolute">绝对模式</option>
+            <option value="relative">相对模式</option>
+        </select>
 
         <br>
         <button type="button" class="confirm-button" onclick="authUsb()">点我授权键鼠控制器</button>
@@ -190,6 +195,12 @@
     }
 
     function renderUsb() {
+
+        let settingsStr = window.localStorage.getItem("settings");
+        let settings = {};
+        if (settingsStr) {
+            settings = JSON.parse(settingsStr)
+        }
         navigator.serial.getPorts()
             .then((ports) => {
                 let selector = document.querySelector("#choice2");
@@ -205,6 +216,16 @@
             .catch(e => {
                 alert(e.message);
             })
+
+        if (settings.mouseClickMode) {
+            let selector = document.querySelector("#choice5");
+            for (let i = 0; i < selector.options.length; i++) {
+                let option = selector.options[i];
+                if (option.value === settings.mouseClickMode) {
+                    option.setAttribute("selected", "selected");
+                }
+            }
+        }
     }
 
     function save() {
@@ -247,8 +268,12 @@
         }
 
         let config = {
-            video: video, audio: audio, usb: usb, resolution: resolution
+            video: video, audio: audio, usb: usb, resolution: resolution, mouseClickMode: "relative"
         };
+        let mouseClickMode = document.querySelector("#choice5");
+        if (mouseClickMode.value) {
+            config.mouseClickMode = mouseClickMode.value;
+        }
 
         window.localStorage.setItem("settings", JSON.stringify(config));
         alert("保存成功")

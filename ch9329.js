@@ -1,4 +1,4 @@
-function Ch9329(writer) {
+function Ch9329(writer, mouseAbsolute) {
     this.keyboardMapping = {
         8: 0x2A,  // Back
         9: 0x2B,  // Tab
@@ -322,6 +322,8 @@ function Ch9329(writer) {
         "MetaRight": 0x08,  // LWin
     }
 
+    this.mouseAbsolute = mouseAbsolute;
+
 
     this.toUnit8Array = function (data) {
         let sum = 2
@@ -380,31 +382,91 @@ function Ch9329(writer) {
         }
     }
 
-    this.mouseClickLeft = function () {
+    this.mouseRelativeClickLeft = function () {
         let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x01, 0x00, 0x00, 0x00];
         let packet = this.toUnit8Array(data);
         this.write(packet);
         this.clicked.command = 0x01;
     }
 
-    this.mouseClickRight = function mouseClickRight() {
+    this.mouseRelativeClickRight = function mouseClickRight() {
         let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x02, 0x00, 0x00, 0x00];
         let packet = this.toUnit8Array(data);
         this.write(packet);
     }
 
-    this.mouseClickMiddle = function () {
+    this.mouseRelativeClickMiddle = function () {
         let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x04, 0x00, 0x00, 0x00];
         let packet = this.toUnit8Array(data);
         this.write(packet);
     }
 
-    this.mouseup = function () {
+    this.mouseupRelative = function () {
         let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00];
         let packet = this.toUnit8Array(data);
         this.write(packet);
         this.clicked.command = 0x00;
     }
+
+    this.mouseAbsoluteClickLeft = function () {
+        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let packet = this.toUnit8Array(data);
+        this.write(packet);
+        this.clicked.command = 0x01;
+    }
+
+    this.mouseAbsoluteClickRight = function mouseClickRight() {
+        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let packet = this.toUnit8Array(data);
+        this.write(packet);
+    }
+
+    this.mouseAbsoluteClickMiddle = function () {
+        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let packet = this.toUnit8Array(data);
+        this.write(packet);
+    }
+
+    this.mouseupAbsolute = function () {
+        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let packet = this.toUnit8Array(data);
+        this.write(packet);
+        this.clicked.command = 0x00;
+    }
+
+
+    this.mouseClickLeft = function () {
+        if (mouseAbsolute) {
+            this.mouseAbsoluteClickLeft();
+        } else {
+            this.mouseRelativeClickLeft();
+        }
+    }
+
+    this.mouseClickRight = function mouseClickRight() {
+        if (mouseAbsolute) {
+            this.mouseAbsoluteClickRight();
+        } else {
+            this.mouseRelativeClickRight();
+        }
+    }
+
+    this.mouseClickMiddle = function () {
+        if (mouseAbsolute) {
+            this.mouseAbsoluteClickMiddle();
+        } else {
+            this.mouseRelativeClickMiddle();
+        }
+    }
+
+    this.mouseup = function () {
+        if (mouseAbsolute) {
+            this.mouseupAbsolute();
+        } else {
+            this.mouseupRelative();
+        }
+    }
+
 
     this.hexHeightLow = function hexHeightLow(val) {
         let high = ((val >> 8) & 0xff); //高8位
@@ -425,12 +487,6 @@ function Ch9329(writer) {
         let packet = this.toUnit8Array(data);
         this.write(packet);
     }
-    //
-    // this.mouseMove = function (x, y) {
-    //     let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, this.clicked.command, x, y, 0x00];
-    //     let packet = this.toUnit8Array(data);
-    //     this.write(packet);
-    // }
 
     this.mouseScroll = function (detail) {
         if (detail === 0) {
