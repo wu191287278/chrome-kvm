@@ -322,8 +322,6 @@ function Ch9329(writer, mouseAbsolute) {
         "MetaRight": 0x08,  // LWin
     }
 
-    this.mouseAbsolute = mouseAbsolute;
-
 
     this.toUnit8Array = function (data) {
         let sum = 2
