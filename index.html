@@ -244,14 +244,18 @@
 
         videoElement.addEventListener('mousedown', (event) => {
             event.preventDefault();
+            let screenWidth = videoElement.videoWidth;
+            let screenHeight = videoElement.videoHeight;
+            let videoWidth = videoElement.offsetWidth;
+            let videoHeight = videoElement.offsetHeight;
             if (event.button === 0) { // 标准属性或兼容性属性
-                ch.mouseClickLeft();
+                ch.mouseClickLeft(screenWidth, screenHeight, videoWidth, videoHeight, event.clientX, event.clientY);
             }
             if (event.button === 1) { // 标准属性或兼容性属性
-                ch.mouseClickMiddle();
+                ch.mouseClickMiddle(screenWidth, screenHeight, videoWidth, videoHeight, event.clientX, event.clientY);
             }
             if (event.button === 2) { // 标准属性或兼容性属性
-                ch.mouseClickRight();
+                ch.mouseClickRight(screenWidth, screenHeight, videoWidth, videoHeight, event.clientX, event.clientY);
             }
         });
         videoElement.addEventListener('contextmenu', (event) => {

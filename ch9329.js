@@ -406,21 +406,42 @@ function Ch9329(writer, mouseAbsolute) {
         this.clicked.command = 0x00;
     }
 
-    this.mouseAbsoluteClickLeft = function () {
-        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00];
+    this.mouseAbsoluteClickLeft = function (screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY) {
+        let event = this.getRealCoordinates(screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY);
+        let x = event.x;
+        let y = event.y;
+        let mouseX = (x * 4096) / screenWidth;
+        let mouseY = (y * 4096) / screenHeight;
+        let xHighLow = this.hexHeightLow(mouseX);
+        let yHighLow = this.hexHeightLow(mouseY);
+        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x01, xHighLow[0], xHighLow[1], yHighLow[0], yHighLow[1], 0x00];
         let packet = this.toUnit8Array(data);
         this.write(packet);
         this.clicked.command = 0x01;
     }
 
-    this.mouseAbsoluteClickRight = function mouseClickRight() {
-        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00];
+    this.mouseAbsoluteClickRight = function mouseClickRight(screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY) {
+        let event = this.getRealCoordinates(screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY);
+        let x = event.x;
+        let y = event.y;
+        let mouseX = (x * 4096) / screenWidth;
+        let mouseY = (y * 4096) / screenHeight;
+        let xHighLow = this.hexHeightLow(mouseX);
+        let yHighLow = this.hexHeightLow(mouseY);
+        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x02, xHighLow[0], xHighLow[1], yHighLow[0], yHighLow[1], 0x00];
         let packet = this.toUnit8Array(data);
         this.write(packet);
     }
 
-    this.mouseAbsoluteClickMiddle = function () {
-        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00];
+    this.mouseAbsoluteClickMiddle = function (screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY) {
+        let event = this.getRealCoordinates(screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY);
+        let x = event.x;
+        let y = event.y;
+        let mouseX = (x * 4096) / screenWidth;
+        let mouseY = (y * 4096) / screenHeight;
+        let xHighLow = this.hexHeightLow(mouseX);
+        let yHighLow = this.hexHeightLow(mouseY);
+        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, 0x04, xHighLow[0], xHighLow[1], yHighLow[0], yHighLow[1], 0x00];
         let packet = this.toUnit8Array(data);
         this.write(packet);
     }
@@ -433,25 +454,25 @@ function Ch9329(writer, mouseAbsolute) {
     }
 
 
-    this.mouseClickLeft = function () {
+    this.mouseClickLeft = function (screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY) {
         if (mouseAbsolute) {
-            this.mouseAbsoluteClickLeft();
+            this.mouseAbsoluteClickLeft(screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY);
         } else {
             this.mouseRelativeClickLeft();
         }
     }
 
-    this.mouseClickRight = function mouseClickRight() {
+    this.mouseClickRight = function mouseClickRight(screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY) {
         if (mouseAbsolute) {
-            this.mouseAbsoluteClickRight();
+            this.mouseAbsoluteClickRight(screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY);
         } else {
             this.mouseRelativeClickRight();
         }
     }
 
-    this.mouseClickMiddle = function () {
+    this.mouseClickMiddle = function (screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY) {
         if (mouseAbsolute) {
-            this.mouseAbsoluteClickMiddle();
+            this.mouseAbsoluteClickMiddle(screenWidth, screenHeight, videoWidth, videoHeight, clientX, clientY);
         } else {
             this.mouseRelativeClickMiddle();
         }
