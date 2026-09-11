@@ -14,296 +14,8 @@ function Ch9329(writer, mouseAbsolute, reader) {
     this._transportBroken = false;
     // 串口写失败（通常是设备被拔掉）时回调，由页面决定怎么提示
     this.onTransportError = null;
-    this.keyboardMapping = {
-        8: 0x2A,  // Back
-        9: 0x2B,  // Tab
-        13: 0x28,  // Enter
-        19: 0x48,  //Pause
-        20: 0x39,  //Caps Lock
-        27: 0x29,  //Escape
-        32: 0x2C,  // Space
-        33: 0x4B,  // PageUp
-        34: 0x4E,  // Next
-        35: 0x4D,  // End
-        36: 0x4A,  // Home
-        37: 0x50,  // Left
-        38: 0x52,  // Up
-        39: 0x4F,  // Right
-        40: 0x51,  // Down
-        44: 0x46,  // PrintScreen
-        45: 0x49,  // Insert
-        46: 0x4C,  // Delete
-        48: 0x27,  // 0
-        49: 0x1E,  // 1
-        50: 0x1F,  // 2
-        51: 0x20,  // 3
-        52: 0x21,  // 4
-        53: 0x22,  // 5
-        54: 0x23,  // 6
-        55: 0x24,  // 7
-        56: 0x25,  // 8
-        57: 0x26,  // 9
-        65: 0x04,  // A
-        66: 0x05,  // B
-        67: 0x06,  // C
-        68: 0x07,  // D
-        69: 0x08,  // E
-        70: 0x09,  // F
-        71: 0x0A,  // G
-        72: 0x0B,  // H
-        73: 0x0C,  // I
-        74: 0x0D,  // J
-        75: 0x0E,  // K
-        76: 0x0F,  // L
-        77: 0x10,  // M
-        78: 0x11,  // N
-        79: 0x12,  // O
-        80: 0x13,  // P
-        81: 0x14,  // Q
-        82: 0x15,  // R
-        83: 0x16,  // S
-        84: 0x17,  // T
-        85: 0x18,  // U
-        86: 0x19,  // V
-        87: 0x1A,  // W
-        88: 0x1B,  // X
-        89: 0x1C,  // Y
-        90: 0x1D,  // Z
-        91: 0xE3,  // LWin
-        93: 0x65,  // Applications
-        96: 0x62,  // NumPad 0
-        97: 0x59,  // NumPad 1
-        98: 0x5A,  // NumPad 2
-        99: 0x5B,  // NumPad 3
-        100: 0x5C,  // NumPad 4
-        101: 0x5D,  // NumPad 5
-        102: 0x5E,  // NumPad 6
-        103: 0x5F,  // NumPad 7
-        104: 0x60,  // NumPad 8
-        105: 0x61,  // NumPad 9
-        106: 0x55,  // NumPad Multiply
-        107: 0x57,  // NumPad Add
-        109: 0x56,  // NumPad Subtract
-        110: 0x63,  // NumPad Decimal
-        111: 0x54,  // NumPad Divide
-        112: 0x3A,  // F1
-        113: 0x3B,  // F2
-        114: 0x3C,  // F3
-        115: 0x3D,  // F4
-        116: 0x3E,  // F5
-        117: 0x3F,  // F6
-        118: 0x40,  // F7
-        119: 0x41,  // F8
-        120: 0x42,  // F9
-        121: 0x43,  // F10
-        122: 0x44,  // F11
-        123: 0x45,  // F12
-        144: 0x53,  // NumLock
-        16: 0xE1,  // LShiftKey
-        161: 0xE5,  // RShiftKey
-        17: 0xE0,  // LControlKey
-        163: 0xE4,  // RControlKey
-        18: 0xE2,  // LAlt
-        165: 0xE6,  // Ralt
-        186: 0x33,  // ;
-        187: 0x2E,  // =
-        188: 0x36,  // ,
-        189: 0x2D,  // -
-        190: 0x37,  // .
-        191: 0x38,  // /
-        192: 0x35,  // `
-        219: 0x2F,  // [
-        220: 0x31,  // \
-        221: 0x30,  // ]
-        222: 0x34,  // '
 
-        "Backspace": 0x2A,  // Back
-        "Tab": 0x2B,  // Tab
-        "Enter": 0x28,  // Enter
-        "Pause": 0x48,  //Pause
-        "CapsLock": 0x39,  //Caps Lock
-        "Escape": 0x29,  //Escape
-        "Space": 0x2C,  // Space
-        "PageUp": 0x4B,  // PageUp
-        "PageDown": 0x4E,  // Next
-        "End": 0x4D,  // End
-        "Home": 0x4A,  // Home
-        "ArrowLeft": 0x50,  // Left
-        "ArrowUp": 0x52,  // Up
-        "ArrowRight": 0x4F,  // Right
-        "ArrowDown": 0x51,  // Down
-        "PrintScreen": 0x46,  // PrintScreen
-        "Insert": 0x49,  // Insert
-        "Delete": 0x4C,  // Delete
-        "Digit0": 0x27,  // 0
-        "Digit1": 0x1E,  // 1
-        "Digit2": 0x1F,  // 2
-        "Digit3": 0x20,  // 3
-        "Digit4": 0x21,  // 4
-        "Digit5": 0x22,  // 5
-        "Digit6": 0x23,  // 6
-        "Digit7": 0x24,  // 7
-        "Digit8": 0x25,  // 8
-        "Digit9": 0x26,  // 9
-        "KeyA": 0x04,  // A
-        "KeyB": 0x05,  // B
-        "KeyC": 0x06,  // C
-        "KeyD": 0x07,  // D
-        "KeyE": 0x08,  // E
-        "KeyF": 0x09,  // F
-        "KeyG": 0x0A,  // G
-        "KeyH": 0x0B,  // H
-        "KeyI": 0x0C,  // I
-        "KeyJ": 0x0D,  // J
-        "KeyK": 0x0E,  // K
-        "KeyL": 0x0F,  // L
-        "KeyM": 0x10,  // M
-        "KeyN": 0x11,  // N
-        "KeyO": 0x12,  // O
-        "KeyP": 0x13,  // P
-        "KeyQ": 0x14,  // Q
-        "KeyR": 0x15,  // R
-        "KeyS": 0x16,  // S
-        "KeyT": 0x17,  // T
-        "KeyU": 0x18,  // U
-        "KeyV": 0x19,  // V
-        "KeyW": 0x1A,  // W
-        "KeyX": 0x1B,  // X
-        "KeyY": 0x1C,  // Y
-        "KeyZ": 0x1D,  // Z
-        "MetaLeft": 0xE3,  // LWin
-        // 93: 0x65,  // Applications
-        "Numpad0": 0x62,  // NumPad 0
-        "Numpad1": 0x59,  // NumPad 1
-        "Numpad2": 0x5A,  // NumPad 2
-        "Numpad3": 0x5B,  // NumPad 3
-        "Numpad4": 0x5C,  // NumPad 4
-        "Numpad5": 0x5D,  // NumPad 5
-        "Numpad6": 0x5E,  // NumPad 6
-        "Numpad7": 0x5F,  // NumPad 7
-        "Numpad8": 0x60,  // NumPad 8
-        "Numpad9": 0x61,  // NumPad 9
-        "NumpadMultiply": 0x55,  // NumPad Multiply
-        "NumpadAdd": 0x57,  // NumPad Add
-        "NumpadSubtract": 0x56,  // NumPad Subtract
-        "NumpadDecimal": 0x63,  // NumPad Decimal
-        "NumpadDivide": 0x54,  // NumPad Divide
-        "F1": 0x3A,  // F1
-        "F2": 0x3B,  // F2
-        "F3": 0x3C,  // F3
-        "F4": 0x3D,  // F4
-        "F5": 0x3E,  // F5
-        "F6": 0x3F,  // F6
-        "F7": 0x40,  // F7
-        "F8": 0x41,  // F8
-        "F9": 0x42,  // F9
-        "F10": 0x43,  // F10
-        "F11": 0x44,  // F11
-        "F12": 0x45,  // F12
-        "NumLock": 0x53,  // NumLock
-        "ShiftLeft": 0xE1,  // LShiftKey
-        "ShiftRight": 0xE5,  // RShiftKey
-        "ControlLeft": 0xE0,  // LControlKey
-        "ControlRight": 0xE4,  // RControlKey
-        "AltLeft": 0xE2,  // LAlt
-        "AltRight": 0xE6,  // Ralt
-        "Semicolon": 0x33,  // ;
-        "Equal": 0x2E,  // =
-        "Comma": 0x36,  // ,
-        "Minus": 0x2D,  // -
-        "Period": 0x37,  // .
-        "Slash": 0x38,  // /
-        "Backquote": 0x35,  // `
-        "BracketLeft": 0x2F,  // [
-        "Backslash": 0x31,  // \
-        "BracketRight": 0x30,  // ]
-        "Quote": 0x34,   // '
-
-        "Back": 0x2A,  // Back
-        " ": 0x2C,  // Space
-        "Next": 0x4E,  // Next
-        "Left": 0x50,  // Left
-        "Up": 0x52,  // Up
-        "Right": 0x4F,  // Right
-        "Down": 0x51,  // Down
-        "0": 0x27,  // 0
-        "1": 0x1E,  // 1
-        "2": 0x1F,  // 2
-        "3": 0x20,  // 3
-        "4": 0x21,  // 4
-        "5": 0x22,  // 5
-        "6": 0x23,  // 6
-        "7": 0x24,  // 7
-        "8": 0x25,  // 8
-        "9": 0x26,  // 9
-        "a": 0x04,  // A
-        "b": 0x05,  // B
-        "c": 0x06,  // C
-        "d": 0x07,  // D
-        "e": 0x08,  // E
-        "f": 0x09,  // F
-        "g": 0x0A,  // G
-        "h": 0x0B,  // H
-        "i": 0x0C,  // I
-        "j": 0x0D,  // J
-        "k": 0x0E,  // K
-        "l": 0x0F,  // L
-        "m": 0x10,  // M
-        "n": 0x11,  // N
-        "o": 0x12,  // O
-        "p": 0x13,  // P
-        "q": 0x14,  // Q
-        "r": 0x15,  // R
-        "s": 0x16,  // S
-        "t": 0x17,  // T
-        "u": 0x18,  // U
-        "v": 0x19,  // V
-        "w": 0x1A,  // W
-        "x": 0x1B,  // X
-        "y": 0x1C,  // Y
-        "z": 0x1D,  // Z
-        "Shift": 0xE1,  // LShiftKey
-        "Control": 0xE0,  // LControlKey
-        "Alt": 0xE2,  // LAlt
-        ";": 0x33,  // ;
-        "=": 0x2E,  // =
-        ",": 0x36,  // ,
-        "-": 0x2D,  // -
-        ".": 0x37,  // .
-        "/": 0x38,  // /
-        "`": 0x35,  // `
-        "[": 0x2F,  // [
-        "\\": 0x31,  // \
-        "]": 0x30,  // ]
-        "'": 0x34,   // '
-        "!": 0x1E,   // !
-        "@": 0x1F,   // @
-        "#": 0x20,   // #
-        "$": 0x21,   // $
-        "%": 0x22,   // %
-        "^": 0x23,   // ^
-        "&": 0x24,   // &
-        "*": 0x25,   // *
-        "(": 0x26,   // (
-        ")": 0x27,   // )
-    }
-
-    this.controlKeyMapping = {
-        16: 0xE1,  // LShiftKey
-        161: 0xE5,  // RShiftKey
-        17: 0xE0,  // LControlKey
-        163: 0xE4,  // RControlKey
-        18: 0xE2,  // LAlt
-        165: 0xE6,  // Ralt
-        "ShiftLeft": 0xE1,  // LShiftKey
-        "ShiftRight": 0xE5,  // RShiftKey
-        "ControlLeft": 0xE0,  // LControlKey
-        "ControlRight": 0xE4,  // RControlKey
-        "AltLeft": 0xE2,  // LAlt
-        "AltRight": 0xE6,  // Ralt
-        "MetaLeft": 0xE3,  // LWin
-    }
-
+    // 哪些修饰键正按着，是会变的实例状态，所以不能和查表常量一起提到外面
     this.controlKeyDown = {
         16: false,  // LShiftKey
         161: false,  // RShiftKey
@@ -320,23 +32,6 @@ function Ch9329(writer, mouseAbsolute, reader) {
         "MetaLeft": false,  // LWin
     }
 
-    this.controlKeyBinary = {
-        // USB HID modifier bitmasks
-        16: 0x02,  // LShiftKey
-        161: 0x20,  // RShiftKey
-        17: 0x01,  // LControlKey
-        163: 0x10,  // RControlKey
-        18: 0x04,  // LAlt
-        165: 0x40,  // RAlt
-        "ShiftLeft": 0x02,
-        "ShiftRight": 0x20,
-        "ControlLeft": 0x01,
-        "ControlRight": 0x10,
-        "AltLeft": 0x04,
-        "AltRight": 0x40,
-        "MetaLeft": 0x08,
-        "MetaRight": 0x80,
-    }
 
     this.pressedKeys = [];
 
@@ -354,7 +49,7 @@ function Ch9329(writer, mouseAbsolute, reader) {
         let controlValue = 0;
         for (const controlKeyDownKey in this.controlKeyDown) {
             if (this.controlKeyDown[controlKeyDownKey]) {
-                controlValue = controlValue | (this.controlKeyBinary[controlKeyDownKey] || 0);
+                controlValue = controlValue | (Ch9329.CONTROL_KEY_BITS[controlKeyDownKey] || 0);
             }
         }
         return controlValue;
@@ -369,12 +64,12 @@ function Ch9329(writer, mouseAbsolute, reader) {
     }
 
     this.keydown = function (key) {
-        if (this.controlKeyMapping[key]) {
+        if (Ch9329.CONTROL_KEY_MAP[key]) {
             this.controlKeyDown[key] = true;
             this.syncKeyboard();
             return;
         }
-        let keyCode = this.keyboardMapping[key];
+        let keyCode = Ch9329.KEYBOARD_MAP[key];
         if (keyCode == null || keyCode === undefined) {
             return;
         }
@@ -390,12 +85,12 @@ function Ch9329(writer, mouseAbsolute, reader) {
     this.keyboardReleasePacket = new Uint8Array([0x57, 0xAB, 0x00, 0x02, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0C]);
 
     this.keyup = function (key) {
-        if (this.controlKeyMapping[key]) {
+        if (Ch9329.CONTROL_KEY_MAP[key]) {
             this.controlKeyDown[key] = false;
             this.syncKeyboard();
             return;
         }
-        let keyCode = this.keyboardMapping[key];
+        let keyCode = Ch9329.KEYBOARD_MAP[key];
         if (keyCode != null && keyCode !== undefined) {
             this.pressedKeys = this.pressedKeys.filter(function (code) {
                 return code !== keyCode;
@@ -773,13 +468,13 @@ function Ch9329(writer, mouseAbsolute, reader) {
             return {code: shifted[ch], shift: true};
         }
         if (ch >= "A" && ch <= "Z") {
-            return {code: this.keyboardMapping[ch.toLowerCase()], shift: true};
+            return {code: Ch9329.KEYBOARD_MAP[ch.toLowerCase()], shift: true};
         }
         if (ch >= "a" && ch <= "z") {
-            return {code: this.keyboardMapping[ch], shift: false};
+            return {code: Ch9329.KEYBOARD_MAP[ch], shift: false};
         }
         if (ch >= "0" && ch <= "9") {
-            return {code: this.keyboardMapping[ch], shift: false};
+            return {code: Ch9329.KEYBOARD_MAP[ch], shift: false};
         }
         const unshifted = {
             "-": 0x2D, "=": 0x2E, "[": 0x2F, "]": 0x30, "\\": 0x31,
@@ -1115,3 +810,317 @@ Ch9329.describeAttempts = function (attempts) {
         return a.baudRate + " 正常";
     }).join("；");
 }
+
+// ===== 查表常量：不可变，放在实例外面，避免每次 new 都重建 =====
+// 键码表很长但只是查表，放在最后，打开文件先看到的是驱动逻辑
+
+// 键码 -> USB HID 用法号
+Ch9329.KEYBOARD_MAP = {
+    8: 0x2A,  // Back
+    9: 0x2B,  // Tab
+    13: 0x28,  // Enter
+    19: 0x48,  //Pause
+    20: 0x39,  //Caps Lock
+    27: 0x29,  //Escape
+    32: 0x2C,  // Space
+    33: 0x4B,  // PageUp
+    34: 0x4E,  // Next
+    35: 0x4D,  // End
+    36: 0x4A,  // Home
+    37: 0x50,  // Left
+    38: 0x52,  // Up
+    39: 0x4F,  // Right
+    40: 0x51,  // Down
+    44: 0x46,  // PrintScreen
+    45: 0x49,  // Insert
+    46: 0x4C,  // Delete
+    48: 0x27,  // 0
+    49: 0x1E,  // 1
+    50: 0x1F,  // 2
+    51: 0x20,  // 3
+    52: 0x21,  // 4
+    53: 0x22,  // 5
+    54: 0x23,  // 6
+    55: 0x24,  // 7
+    56: 0x25,  // 8
+    57: 0x26,  // 9
+    65: 0x04,  // A
+    66: 0x05,  // B
+    67: 0x06,  // C
+    68: 0x07,  // D
+    69: 0x08,  // E
+    70: 0x09,  // F
+    71: 0x0A,  // G
+    72: 0x0B,  // H
+    73: 0x0C,  // I
+    74: 0x0D,  // J
+    75: 0x0E,  // K
+    76: 0x0F,  // L
+    77: 0x10,  // M
+    78: 0x11,  // N
+    79: 0x12,  // O
+    80: 0x13,  // P
+    81: 0x14,  // Q
+    82: 0x15,  // R
+    83: 0x16,  // S
+    84: 0x17,  // T
+    85: 0x18,  // U
+    86: 0x19,  // V
+    87: 0x1A,  // W
+    88: 0x1B,  // X
+    89: 0x1C,  // Y
+    90: 0x1D,  // Z
+    91: 0xE3,  // LWin
+    93: 0x65,  // Applications
+    96: 0x62,  // NumPad 0
+    97: 0x59,  // NumPad 1
+    98: 0x5A,  // NumPad 2
+    99: 0x5B,  // NumPad 3
+    100: 0x5C,  // NumPad 4
+    101: 0x5D,  // NumPad 5
+    102: 0x5E,  // NumPad 6
+    103: 0x5F,  // NumPad 7
+    104: 0x60,  // NumPad 8
+    105: 0x61,  // NumPad 9
+    106: 0x55,  // NumPad Multiply
+    107: 0x57,  // NumPad Add
+    109: 0x56,  // NumPad Subtract
+    110: 0x63,  // NumPad Decimal
+    111: 0x54,  // NumPad Divide
+    112: 0x3A,  // F1
+    113: 0x3B,  // F2
+    114: 0x3C,  // F3
+    115: 0x3D,  // F4
+    116: 0x3E,  // F5
+    117: 0x3F,  // F6
+    118: 0x40,  // F7
+    119: 0x41,  // F8
+    120: 0x42,  // F9
+    121: 0x43,  // F10
+    122: 0x44,  // F11
+    123: 0x45,  // F12
+    144: 0x53,  // NumLock
+    16: 0xE1,  // LShiftKey
+    161: 0xE5,  // RShiftKey
+    17: 0xE0,  // LControlKey
+    163: 0xE4,  // RControlKey
+    18: 0xE2,  // LAlt
+    165: 0xE6,  // Ralt
+    186: 0x33,  // ;
+    187: 0x2E,  // =
+    188: 0x36,  // ,
+    189: 0x2D,  // -
+    190: 0x37,  // .
+    191: 0x38,  // /
+    192: 0x35,  // `
+    219: 0x2F,  // [
+    220: 0x31,  // \
+    221: 0x30,  // ]
+    222: 0x34,  // '
+
+    "Backspace": 0x2A,  // Back
+    "Tab": 0x2B,  // Tab
+    "Enter": 0x28,  // Enter
+    "Pause": 0x48,  //Pause
+    "CapsLock": 0x39,  //Caps Lock
+    "Escape": 0x29,  //Escape
+    "Space": 0x2C,  // Space
+    "PageUp": 0x4B,  // PageUp
+    "PageDown": 0x4E,  // Next
+    "End": 0x4D,  // End
+    "Home": 0x4A,  // Home
+    "ArrowLeft": 0x50,  // Left
+    "ArrowUp": 0x52,  // Up
+    "ArrowRight": 0x4F,  // Right
+    "ArrowDown": 0x51,  // Down
+    "PrintScreen": 0x46,  // PrintScreen
+    "Insert": 0x49,  // Insert
+    "Delete": 0x4C,  // Delete
+    "Digit0": 0x27,  // 0
+    "Digit1": 0x1E,  // 1
+    "Digit2": 0x1F,  // 2
+    "Digit3": 0x20,  // 3
+    "Digit4": 0x21,  // 4
+    "Digit5": 0x22,  // 5
+    "Digit6": 0x23,  // 6
+    "Digit7": 0x24,  // 7
+    "Digit8": 0x25,  // 8
+    "Digit9": 0x26,  // 9
+    "KeyA": 0x04,  // A
+    "KeyB": 0x05,  // B
+    "KeyC": 0x06,  // C
+    "KeyD": 0x07,  // D
+    "KeyE": 0x08,  // E
+    "KeyF": 0x09,  // F
+    "KeyG": 0x0A,  // G
+    "KeyH": 0x0B,  // H
+    "KeyI": 0x0C,  // I
+    "KeyJ": 0x0D,  // J
+    "KeyK": 0x0E,  // K
+    "KeyL": 0x0F,  // L
+    "KeyM": 0x10,  // M
+    "KeyN": 0x11,  // N
+    "KeyO": 0x12,  // O
+    "KeyP": 0x13,  // P
+    "KeyQ": 0x14,  // Q
+    "KeyR": 0x15,  // R
+    "KeyS": 0x16,  // S
+    "KeyT": 0x17,  // T
+    "KeyU": 0x18,  // U
+    "KeyV": 0x19,  // V
+    "KeyW": 0x1A,  // W
+    "KeyX": 0x1B,  // X
+    "KeyY": 0x1C,  // Y
+    "KeyZ": 0x1D,  // Z
+    "MetaLeft": 0xE3,  // LWin
+    // 93: 0x65,  // Applications
+    "Numpad0": 0x62,  // NumPad 0
+    "Numpad1": 0x59,  // NumPad 1
+    "Numpad2": 0x5A,  // NumPad 2
+    "Numpad3": 0x5B,  // NumPad 3
+    "Numpad4": 0x5C,  // NumPad 4
+    "Numpad5": 0x5D,  // NumPad 5
+    "Numpad6": 0x5E,  // NumPad 6
+    "Numpad7": 0x5F,  // NumPad 7
+    "Numpad8": 0x60,  // NumPad 8
+    "Numpad9": 0x61,  // NumPad 9
+    "NumpadMultiply": 0x55,  // NumPad Multiply
+    "NumpadAdd": 0x57,  // NumPad Add
+    "NumpadSubtract": 0x56,  // NumPad Subtract
+    "NumpadDecimal": 0x63,  // NumPad Decimal
+    "NumpadDivide": 0x54,  // NumPad Divide
+    "F1": 0x3A,  // F1
+    "F2": 0x3B,  // F2
+    "F3": 0x3C,  // F3
+    "F4": 0x3D,  // F4
+    "F5": 0x3E,  // F5
+    "F6": 0x3F,  // F6
+    "F7": 0x40,  // F7
+    "F8": 0x41,  // F8
+    "F9": 0x42,  // F9
+    "F10": 0x43,  // F10
+    "F11": 0x44,  // F11
+    "F12": 0x45,  // F12
+    "NumLock": 0x53,  // NumLock
+    "ShiftLeft": 0xE1,  // LShiftKey
+    "ShiftRight": 0xE5,  // RShiftKey
+    "ControlLeft": 0xE0,  // LControlKey
+    "ControlRight": 0xE4,  // RControlKey
+    "AltLeft": 0xE2,  // LAlt
+    "AltRight": 0xE6,  // Ralt
+    "Semicolon": 0x33,  // ;
+    "Equal": 0x2E,  // =
+    "Comma": 0x36,  // ,
+    "Minus": 0x2D,  // -
+    "Period": 0x37,  // .
+    "Slash": 0x38,  // /
+    "Backquote": 0x35,  // `
+    "BracketLeft": 0x2F,  // [
+    "Backslash": 0x31,  // \
+    "BracketRight": 0x30,  // ]
+    "Quote": 0x34,   // '
+
+    "Back": 0x2A,  // Back
+    " ": 0x2C,  // Space
+    "Next": 0x4E,  // Next
+    "Left": 0x50,  // Left
+    "Up": 0x52,  // Up
+    "Right": 0x4F,  // Right
+    "Down": 0x51,  // Down
+    "0": 0x27,  // 0
+    "1": 0x1E,  // 1
+    "2": 0x1F,  // 2
+    "3": 0x20,  // 3
+    "4": 0x21,  // 4
+    "5": 0x22,  // 5
+    "6": 0x23,  // 6
+    "7": 0x24,  // 7
+    "8": 0x25,  // 8
+    "9": 0x26,  // 9
+    "a": 0x04,  // A
+    "b": 0x05,  // B
+    "c": 0x06,  // C
+    "d": 0x07,  // D
+    "e": 0x08,  // E
+    "f": 0x09,  // F
+    "g": 0x0A,  // G
+    "h": 0x0B,  // H
+    "i": 0x0C,  // I
+    "j": 0x0D,  // J
+    "k": 0x0E,  // K
+    "l": 0x0F,  // L
+    "m": 0x10,  // M
+    "n": 0x11,  // N
+    "o": 0x12,  // O
+    "p": 0x13,  // P
+    "q": 0x14,  // Q
+    "r": 0x15,  // R
+    "s": 0x16,  // S
+    "t": 0x17,  // T
+    "u": 0x18,  // U
+    "v": 0x19,  // V
+    "w": 0x1A,  // W
+    "x": 0x1B,  // X
+    "y": 0x1C,  // Y
+    "z": 0x1D,  // Z
+    "Shift": 0xE1,  // LShiftKey
+    "Control": 0xE0,  // LControlKey
+    "Alt": 0xE2,  // LAlt
+    ";": 0x33,  // ;
+    "=": 0x2E,  // =
+    ",": 0x36,  // ,
+    "-": 0x2D,  // -
+    ".": 0x37,  // .
+    "/": 0x38,  // /
+    "`": 0x35,  // `
+    "[": 0x2F,  // [
+    "\\": 0x31,  // \
+    "]": 0x30,  // ]
+    "'": 0x34,   // '
+    "!": 0x1E,   // !
+    "@": 0x1F,   // @
+    "#": 0x20,   // #
+    "$": 0x21,   // $
+    "%": 0x22,   // %
+    "^": 0x23,   // ^
+    "&": 0x24,   // &
+    "*": 0x25,   // *
+    "(": 0x26,   // (
+    ")": 0x27,   // )
+};
+
+// 修饰键 -> USB HID 用法号
+Ch9329.CONTROL_KEY_MAP = {
+    16: 0xE1,  // LShiftKey
+    161: 0xE5,  // RShiftKey
+    17: 0xE0,  // LControlKey
+    163: 0xE4,  // RControlKey
+    18: 0xE2,  // LAlt
+    165: 0xE6,  // Ralt
+    "ShiftLeft": 0xE1,  // LShiftKey
+    "ShiftRight": 0xE5,  // RShiftKey
+    "ControlLeft": 0xE0,  // LControlKey
+    "ControlRight": 0xE4,  // RControlKey
+    "AltLeft": 0xE2,  // LAlt
+    "AltRight": 0xE6,  // Ralt
+    "MetaLeft": 0xE3,  // LWin
+};
+
+// 修饰键 -> USB HID 修饰位
+Ch9329.CONTROL_KEY_BITS = {
+    // USB HID modifier bitmasks
+    16: 0x02,  // LShiftKey
+    161: 0x20,  // RShiftKey
+    17: 0x01,  // LControlKey
+    163: 0x10,  // RControlKey
+    18: 0x04,  // LAlt
+    165: 0x40,  // RAlt
+    "ShiftLeft": 0x02,
+    "ShiftRight": 0x20,
+    "ControlLeft": 0x01,
+    "ControlRight": 0x10,
+    "AltLeft": 0x04,
+    "AltRight": 0x40,
+    "MetaLeft": 0x08,
+    "MetaRight": 0x80,
+};
