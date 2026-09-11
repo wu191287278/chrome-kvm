@@ -622,6 +622,90 @@ function Ch9329(writer, mouseAbsolute, reader) {
         return info ? info.capsLock : null;
     }
 
+    // CMD_GET_PARA_CFG：返回 50 字节配置，波特率在第 3-6 字节，高字节在前
+    this.PARA_CFG_LENGTH = 50;
+    this.PARA_CFG_BAUD_OFFSET = 3;
+
+    this.getParaCfg = async function () {
+        let frame = await this._enqueue({
+            packet: this.toUnit8Array([0x57, 0xAB, this.ADDR, 0x08, 0x00]),
+            retries: 1
+        });
+        if (!frame || frame.cmd !== 0x88 || !frame.data || frame.data.length !== this.PARA_CFG_LENGTH) {
+            return null;
+        }
+        return frame.data;
+    }
+
+    this.readParaBaudRate = function (cfg) {
+        let o = this.PARA_CFG_BAUD_OFFSET;
+        return ((cfg[o] << 24) | (cfg[o + 1] << 16) | (cfg[o + 2] << 8) | cfg[o + 3]) >>> 0;
+    }
+
+    this.setParaCfg = async function (cfg) {
+        let data = [0x57, 0xAB, this.ADDR, 0x09, this.PARA_CFG_LENGTH];
+        for (let i = 0; i < this.PARA_CFG_LENGTH; i++) {
+            data.push(cfg[i]);
+        }
+        let frame = await this._enqueue({packet: this.toUnit8Array(data), retries: 1});
+        if (!frame || frame.cmd !== 0x89) {
+            return {ok: false, status: frame ? frame.data[0] : null};
+        }
+        return {ok: frame.data[0] === 0x00, status: frame.data[0]};
+    }
+
+    this.reset = function () {
+        return this._enqueue({
+            packet: this.toUnit8Array([0x57, 0xAB, this.ADDR, 0x0F, 0x00]),
+            retries: 0
+        });
+    }
+
+    this.setBaudRate = async function (baud) {
+        let cfg = await this.getParaCfg();
+        if (!cfg) {
+            return {ok: false, reason: "读取芯片参数配置失败"};
+        }
+        if (this.readParaBaudRate(cfg) === baud) {
+            return {ok: true, unchanged: true};
+        }
+        let next = new Uint8Array(cfg);
+        // 读回的工作模式/串口模式带 0x80 表示由硬件引脚决定，但设置命令只接受 0x00-0x03 / 0x00-0x02
+        next[0] = cfg[0] & 0x7f;
+        next[1] = cfg[1] & 0x7f;
+        if (next[0] > 0x03 || next[1] > 0x02) {
+            return {ok: false, reason: "芯片当前工作模式超出可设置范围，已放弃写入"};
+        }
+        let o = this.PARA_CFG_BAUD_OFFSET;
+        next[o] = (baud >>> 24) & 0xff;
+        next[o + 1] = (baud >>> 16) & 0xff;
+        next[o + 2] = (baud >>> 8) & 0xff;
+        next[o + 3] = baud & 0xff;
+        let result = await this.setParaCfg(next);
+        if (!result.ok) {
+            let status = result.status == null ? "无应答" : "0x" + result.status.toString(16);
+            return {ok: false, reason: "写入参数配置失败（" + status + "）"};
+        }
+        return {ok: true};
+    }
+
+    this.dispose = async function () {
+        this._queue = [];
+        try {
+            if (reader) {
+                await reader.cancel();
+                reader.releaseLock();
+            }
+        } catch (e) {
+        }
+        try {
+            if (writer) {
+                writer.releaseLock();
+            }
+        } catch (e) {
+        }
+    }
+
     this.ensureCapsLockOff = async function () {
         let capsOn = await this.queryCapsLock();
         if (capsOn !== true) {
@@ -998,4 +1082,43 @@ function Ch9329(writer, mouseAbsolute, reader) {
         }
         this.sendRelativePacket(this.clicked.command, 0, 0, wheel);
     }
+}
+
+Ch9329.BAUD_RATES = [9600, 115200];
+
+// 依次用候选波特率打开串口，取第一个能应答 GET_INFO 的；
+// 全部不应答时退回首选波特率，保持「只发不等」的可用状态
+Ch9329.connect = async function (port, baudRates, mouseAbsolute) {
+    async function closePort() {
+        if (port.readable || port.writable) {
+            try {
+                await port.close();
+            } catch (e) {
+            }
+        }
+    }
+
+    for (let i = 0; i < baudRates.length; i++) {
+        await closePort();
+        try {
+            await port.open({baudRate: baudRates[i]});
+        } catch (e) {
+            continue;
+        }
+        let ch = new Ch9329(port.writable.getWriter(), mouseAbsolute, port.readable.getReader());
+        let info = await ch.getInfo();
+        if (info) {
+            return {ch: ch, info: info, baudRate: baudRates[i], probed: true};
+        }
+        await ch.dispose();
+    }
+
+    await closePort();
+    await port.open({baudRate: baudRates[0]});
+    return {
+        ch: new Ch9329(port.writable.getWriter(), mouseAbsolute, port.readable.getReader()),
+        info: null,
+        baudRate: baudRates[0],
+        probed: false
+    };
 }

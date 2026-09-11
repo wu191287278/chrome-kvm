@@ -119,6 +119,16 @@
             桌面请用绝对模式；相对模式未完整支持（适合后续 BIOS 场景）
         </p>
 
+        <label for="choice6">串口波特率</label>
+        <select id="choice6" name="choice6">
+            <option value="9600">9600（芯片出厂默认）</option>
+            <option value="115200">115200（鼠标更跟手）</option>
+        </select>
+        <button type="button" class="confirm-button" onclick="applyBaudRate()">写入 CH9329 芯片</button>
+        <p id="baudHint" style="font-size: 12px; color: #888; margin: 4px 0 0;">
+            改波特率需要写进芯片，写入后断电重插 CH9329 才生效
+        </p>
+
         <br>
         <button type="button" class="confirm-button" onclick="authUsb()">点我授权键鼠控制器</button>
         <br>
@@ -131,6 +141,7 @@
     <p id="usedUsb" style="display: none">当前使用的控制器:</p>
 </div>
 </body>
+<script src="ch9329.js"></script>
 <script>
     async function authUsb() {
         await navigator.serial.requestPort();
@@ -262,6 +273,72 @@
                 }
             }
         }
+
+        let baudSelector = document.querySelector("#choice6");
+        for (let i = 0; i < baudSelector.options.length; i++) {
+            let option = baudSelector.options[i];
+            if (parseInt(option.value) === (settings.baudRate || 9600)) {
+                option.setAttribute("selected", "selected");
+            }
+        }
+    }
+
+    function savedSerialFilter(settings) {
+        if (!settings.usb || !settings.usb.deviceId) {
+            return null;
+        }
+        try {
+            return typeof settings.usb.deviceId === "string"
+                ? JSON.parse(settings.usb.deviceId)
+                : settings.usb.deviceId;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function applyBaudRate() {
+        let target = parseInt(document.querySelector("#choice6").value);
+        let settings = JSON.parse(window.localStorage.getItem("settings") || "{}");
+        let ports = await navigator.serial.getPorts();
+        let filter = savedSerialFilter(settings);
+        let port = null;
+        for (let i = 0; i < ports.length; i++) {
+            let info = ports[i].getInfo();
+            if (!filter || (info.usbVendorId === filter.usbVendorId && info.usbProductId === filter.usbProductId)) {
+                port = ports[i];
+                break;
+            }
+        }
+        if (!port) {
+            alert("未找到已授权的 CH9329 串口，请先授权并保存。");
+            return;
+        }
+
+        let connection = await Ch9329.connect(port, Ch9329.BAUD_RATES, true);
+        if (!connection.info) {
+            await connection.ch.dispose();
+            await port.close();
+            alert("CH9329 没有应答，无法写入波特率。请检查串口接线后重试。");
+            return;
+        }
+        let result = await connection.ch.setBaudRate(target);
+        await connection.ch.dispose();
+        try {
+            await port.close();
+        } catch (e) {
+        }
+        if (!result.ok) {
+            alert("写入失败：" + result.reason);
+            return;
+        }
+
+        settings.baudRate = target;
+        window.localStorage.setItem("settings", JSON.stringify(settings));
+        if (result.unchanged) {
+            alert("芯片波特率已经是 " + target + "，无需改动。");
+            return;
+        }
+        alert("已写入 " + target + "。请把 CH9329 断电重插（拔掉 USB 再插回）后生效。");
     }
 
     function save() {
@@ -309,7 +386,8 @@
             usb: usb,
             resolution: resolution,
             mouseClickMode: "absolute",
-            mouseModeVersion: 1
+            mouseModeVersion: 1,
+            baudRate: parseInt(document.querySelector("#choice6").value) || 9600
         };
         let mouseClickMode = document.querySelector("#choice5");
         if (mouseClickMode.value === "absolute" || mouseClickMode.value === "relative") {
