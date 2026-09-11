@@ -17,53 +17,82 @@
         background: black;
     }
 
-    /* 工具栏样式 */
+    /* 工具栏样式：浮在视频上，半透明毛玻璃比实心块更少遮挡画面 */
     .floating-toolbar {
         position: fixed;
         top: 50%;
         left: 0;
         transform: translateY(-50%);
-        background-color: #333;
-        color: white;
-        padding: 10px;
-        border-radius: 0 5px 5px 0;
-        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2px;
+        padding: 8px 7px;
+        background-color: rgba(24, 24, 27, 0.72);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-left: none;
+        border-radius: 0 12px 12px 0;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+        color: #e4e4e7;
         z-index: 1000;
-        transition: transform 0.3s, opacity 0.3s;
+        transition: transform 0.25s ease;
     }
 
-    /* 隐藏的样式 */
+    /* 收起时整条滑出屏幕，只留右侧那截把手 */
     .floating-toolbar.hidden {
-        transform: translate(-90%, -50%);
+        transform: translate(-100%, -50%);
     }
 
     /* 按钮样式 */
     .floating-toolbar button {
-        display: block;
-        width: 40px;
-        height: 40px;
-        margin: 5px 0;
+        /* tooltip 要贴着按钮定位，少了这行会以整条工具栏为基准 */
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        padding: 0;
         border: none;
-        background-color: #555;
-        color: white;
-        font-size: 16px;
-        border-radius: 50%;
+        border-radius: 10px;
+        background-color: transparent;
+        color: inherit;
         cursor: pointer;
-        transition: background-color 0.3s;
+        transition: background-color 0.15s, color 0.15s;
     }
 
     .floating-toolbar button:hover {
-        background-color: #777;
+        background-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .floating-toolbar button:active {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .floating-toolbar button:focus-visible {
+        outline: 2px solid #60a5fa;
+        outline-offset: -2px;
+    }
+
+    .floating-toolbar button svg {
+        width: 20px;
+        height: 20px;
+        pointer-events: none;
+    }
+
+    /* 功能分组之间的细分隔线 */
+    .toolbar-divider {
+        width: 22px;
+        height: 1px;
+        margin: 4px 0;
+        background-color: rgba(255, 255, 255, 0.12);
     }
 
     /* 连接状态指示：灰=未连接，绿=正常，黄=可用但有问题，红=失败 */
-    #statusButton {
-        font-size: 20px;
-        line-height: 1;
-    }
-
     #statusButton.status-idle {
-        color: #999;
+        color: #a1a1aa;
     }
 
     #statusButton.status-ok {
@@ -78,55 +107,99 @@
         color: #ff5252;
     }
 
+    /* 录制中用常亮的红底提醒，免得忘了还在录 */
+    #stopRecordStatus {
+        color: #ff5252;
+        background-color: rgba(255, 82, 82, 0.16);
+    }
+
+    #stopRecordStatus:hover {
+        background-color: rgba(255, 82, 82, 0.28);
+    }
+
+    /* 全屏按钮按当前状态切换图标 */
+    .icon-exit-fullscreen {
+        display: none;
+    }
+
+    body.is-fullscreen .icon-enter-fullscreen {
+        display: none;
+    }
+
+    body.is-fullscreen .icon-exit-fullscreen {
+        display: block;
+    }
+
     /* 工具提示文字 */
     .tooltip {
         position: absolute;
         top: 50%;
-        left: 100%;
+        left: calc(100% + 10px);
         transform: translateY(-50%);
-        background-color: #333;
-        color: white;
-        padding: 5px 10px;
-        border-radius: 3px;
+        background-color: rgba(24, 24, 27, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #f4f4f5;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font: 12px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
         white-space: nowrap;
         opacity: 0;
         pointer-events: none;
-        transition: opacity 0.3s;
+        transition: opacity 0.15s;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     }
 
-    .floating-toolbar button:hover .tooltip {
+    .tooltip::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        right: 100%;
+        transform: translateY(-50%);
+        border: 5px solid transparent;
+        border-right-color: rgba(24, 24, 27, 0.95);
+    }
+
+    .floating-toolbar button:hover .tooltip,
+    .floating-toolbar button:focus-visible .tooltip {
         opacity: 1;
     }
 
-    /* 显示/隐藏箭头按钮样式 */
+    /* 显示/隐藏把手 */
     .toggle-button {
-        width: 30px;
-        height: 30px;
-        margin: 5px 0;
-        border: none;
-        background-color: #555;
-        color: white;
-        font-size: 10px;
-        border-radius: 50%;
-        cursor: pointer;
-        transition: background-color 0.3s;
+        width: 38px;
+        height: 26px;
     }
 
-    .toggle-button:hover {
-        background-color: #777;
+    /* 选择器要够具体才压得住上面的 .floating-toolbar button svg */
+    .floating-toolbar .toggle-button svg {
+        width: 16px;
+        height: 16px;
+        transition: transform 0.25s ease;
     }
 
-    /* 隐藏状态时箭头按钮样式 */
+    /* 收起状态下把手留在屏幕边缘，箭头翻个面 */
     .floating-toolbar.hidden .toggle-button {
         position: absolute;
         top: 50%;
-        left: 100%;
+        /* 100% 是内边距盒的右沿，加上 1px 边框才刚好贴住屏幕左边 */
+        left: calc(100% + 1px);
         transform: translateY(-50%);
-        background-color: #333;
-        width: 10px;
-        height: 20px;
-        font-size: 8px;
-        border-radius: 5px 0 0 5px;
+        width: 18px;
+        height: 46px;
+        background-color: rgba(24, 24, 27, 0.72);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-left: none;
+        border-radius: 0 8px 8px 0;
+    }
+
+    .floating-toolbar.hidden .toggle-button svg {
+        transform: rotate(180deg);
+    }
+
+    .floating-toolbar.hidden .toggle-button .tooltip {
+        left: calc(100% + 8px);
     }
 </style>
 
@@ -135,46 +208,115 @@
     <video id="video" playsinline autoplay style="width: 100%;height:100%;cursor: none"></video>
     <button id="authSerial" style="display: none"></button>
 </div>
+<!-- 图标用内联 SVG：emoji 在各系统上渲染差异太大，且语义常对不上 -->
 <div class="floating-toolbar hidden">
-    <button onclick="refreshStatus()" id="statusButton" class="status-idle">
-        ●
+    <button onclick="refreshStatus()" id="statusButton" class="status-idle" aria-label="连接状态">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="5" fill="currentColor"/>
+            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"/>
+        </svg>
         <span class="tooltip" id="statusTooltip">未连接串口</span>
     </button>
-    <button onclick="toggleFullScreen()">
-        🖥️
-        <span class="tooltip">全屏</span>
+
+    <div class="toolbar-divider"></div>
+
+    <button onclick="toggleFullScreen()" id="fullscreenButton" aria-label="全屏">
+        <svg class="icon-enter-fullscreen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+            <path d="M16 3h3a2 2 0 0 1 2 2v3"/>
+            <path d="M21 16v3a2 2 0 0 1-2 2h-3"/>
+            <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+        <svg class="icon-exit-fullscreen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3v3a2 2 0 0 1-2 2H3"/>
+            <path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+            <path d="M3 16h3a2 2 0 0 1 2 2v3"/>
+            <path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+        </svg>
+        <span class="tooltip" id="fullscreenTooltip">全屏</span>
     </button>
-    <button onclick="startRecord()" id="startRecordStatus">
-        📹
+    <button onclick="startRecord()" id="startRecordStatus" aria-label="录制">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="6" fill="currentColor"/>
+            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.4"/>
+        </svg>
         <span class="tooltip">录制</span>
     </button>
-    <button onclick="stopRecord()" id="stopRecordStatus" style="display: none">
-        ⏺️
+    <button onclick="stopRecord()" id="stopRecordStatus" style="display: none" aria-label="停止录制">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/>
+        </svg>
         <span class="tooltip">停止录制</span>
     </button>
-    <button onclick="window.location.href='settings.html'">
-        ⚙️
-        <span class="tooltip">设置</span>
-    </button>
-    <button onclick="ctrlAltDel()">
-        ⚡️
+
+    <div class="toolbar-divider"></div>
+
+    <button onclick="ctrlAltDel()" aria-label="发送 Ctrl+Alt+Delete">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <path d="M6 9h.01"/>
+            <path d="M10 9h.01"/>
+            <path d="M14 9h.01"/>
+            <path d="M18 9h.01"/>
+            <path d="M7 15h10"/>
+        </svg>
         <span class="tooltip">Ctrl+Alt+Delete</span>
     </button>
-    <button onclick="pasteText()">
-        📋
+    <button onclick="pasteText()" aria-label="粘贴文本">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+            <rect x="8" y="2" width="8" height="4" rx="1"/>
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            <path d="M9 12h6"/>
+            <path d="M9 16h4"/>
+        </svg>
         <span class="tooltip">粘贴文本</span>
     </button>
-    <button onclick="releaseAllInput()">
-        🔓
+    <button onclick="releaseAllInput()" aria-label="强制松开所有键">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="4" width="20" height="16" rx="2"/>
+            <path d="M6 9h.01"/>
+            <path d="M10 9h.01"/>
+            <path d="M7 15h10"/>
+            <path d="M3 3l18 18"/>
+        </svg>
         <span class="tooltip">强制松开所有键</span>
     </button>
-    <button onclick="window.location.reload()">
-        ♻
+
+    <div class="toolbar-divider"></div>
+
+    <button onclick="window.location.href='settings.html'" aria-label="设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span class="tooltip">设置</span>
+    </button>
+    <button onclick="window.location.reload()" aria-label="刷新页面">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 2v6h-6"/>
+            <path d="M3 12a9 9 0 0 1 15-6.7L21 8"/>
+            <path d="M3 22v-6h6"/>
+            <path d="M21 12a9 9 0 0 1-15 6.7L3 16"/>
+        </svg>
         <span class="tooltip">刷新</span>
     </button>
-    <button class="toggle-button" onclick="toggleToolbar()">
-        ️》
-        <span class="tooltip">隐藏</span>
+
+    <div class="toolbar-divider"></div>
+
+    <!-- 页面默认是收起状态，所以初始文案是「展开」 -->
+    <button class="toggle-button" onclick="toggleToolbar()" id="toggleButton" aria-label="展开工具栏">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6"/>
+        </svg>
+        <span class="tooltip" id="toggleTooltip">展开</span>
     </button>
 </div>
 </body>
@@ -330,7 +472,9 @@
         if (!button || !tooltip) {
             return;
         }
-        button.className = "status-" + level;
+        // 用 classList 而不是覆盖 className，否则会把按钮上其他的类一起抹掉
+        button.classList.remove("status-idle", "status-ok", "status-warn", "status-error");
+        button.classList.add("status-" + level);
         tooltip.innerHTML = lines.join("<br>");
     }
 
@@ -599,8 +743,10 @@
     function toggleToolbar() {
         const toolbar = document.querySelector('.floating-toolbar');
         toolbar.classList.toggle('hidden');
-        const toggleButton = toolbar.querySelector('.toggle-button');
-        toggleButton.innerHTML = toolbar.classList.contains('hidden') ? '》' : '⬅';
+        // 箭头方向交给 CSS 旋转，这里只更新文案
+        const collapsed = toolbar.classList.contains('hidden');
+        document.querySelector('#toggleTooltip').innerText = collapsed ? '展开' : '收起';
+        document.querySelector('#toggleButton').setAttribute('aria-label', collapsed ? '展开工具栏' : '收起工具栏');
     }
 
     function toggleFullScreen() {
@@ -614,6 +760,14 @@
             }
         }
     }
+
+    // 全屏状态可能被 F11 或 Esc 改变，不只是点按钮，所以监听事件而不是在点击里切图标
+    document.addEventListener('fullscreenchange', function () {
+        let full = !!document.fullscreenElement;
+        document.body.classList.toggle('is-fullscreen', full);
+        document.querySelector('#fullscreenTooltip').innerText = full ? '退出全屏' : '全屏';
+        document.querySelector('#fullscreenButton').setAttribute('aria-label', full ? '退出全屏' : '全屏');
+    });
 
     let mediaRecorder;
 
@@ -635,7 +789,7 @@
 
     function startRecord() {
         document.querySelector("#startRecordStatus").style.display = "none";
-        document.querySelector("#stopRecordStatus").style.display = "block";
+        document.querySelector("#stopRecordStatus").style.display = "flex";
         if (mediaRecorder) {
             mediaRecorder.stop();
         }
@@ -677,7 +831,7 @@
             mediaRecorder.stop();
         }
 
-        document.querySelector("#startRecordStatus").style.display = "block";
+        document.querySelector("#startRecordStatus").style.display = "flex";
         document.querySelector("#stopRecordStatus").style.display = "none";
     }
 
