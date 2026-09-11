@@ -90,20 +90,20 @@
         background-color: rgba(255, 255, 255, 0.12);
     }
 
-    /* 连接状态指示：灰=未连接，绿=正常，黄=可用但有问题，红=失败 */
-    #statusButton.status-idle {
+    /* 状态指示：灰=未连接，绿=正常，黄=可用但有问题，红=失败。视频和键鼠各一个 */
+    .status-indicator.status-idle {
         color: #a1a1aa;
     }
 
-    #statusButton.status-ok {
+    .status-indicator.status-ok {
         color: #3ddc84;
     }
 
-    #statusButton.status-warn {
+    .status-indicator.status-warn {
         color: #ffc107;
     }
 
-    #statusButton.status-error {
+    .status-indicator.status-error {
         color: #ff5252;
     }
 
@@ -210,12 +210,28 @@
 </div>
 <!-- 图标用内联 SVG：emoji 在各系统上渲染差异太大，且语义常对不上 -->
 <div class="floating-toolbar hidden">
-    <button onclick="refreshStatus()" id="statusButton" class="status-idle" aria-label="连接状态">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="5" fill="currentColor"/>
-            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"/>
+    <button onclick="refreshVideoStatus()" id="videoStatusButton" class="status-indicator status-idle"
+            aria-label="视频状态">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="6" width="14" height="12" rx="2"/>
+            <path d="M22 8l-6 4 6 4V8z"/>
         </svg>
-        <span class="tooltip" id="statusTooltip">未连接串口</span>
+        <span class="tooltip" id="videoStatusTooltip">未打开视频</span>
+    </button>
+    <button onclick="refreshStatus()" id="inputStatusButton" class="status-indicator status-idle"
+            aria-label="键鼠状态">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+            <rect x="1" y="8" width="14" height="10" rx="2"/>
+            <path d="M4 11.5h.01"/>
+            <path d="M7.5 11.5h.01"/>
+            <path d="M11 11.5h.01"/>
+            <path d="M4.5 14.5h6"/>
+            <rect x="17" y="6" width="6" height="12" rx="3"/>
+            <path d="M20 8.5v2"/>
+        </svg>
+        <span class="tooltip" id="inputStatusTooltip">未连接串口</span>
     </button>
 
     <div class="toolbar-divider"></div>
@@ -239,8 +255,7 @@
     </button>
     <button onclick="startRecord()" id="startRecordStatus" aria-label="录制">
         <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="6" fill="currentColor"/>
-            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.6" opacity="0.4"/>
+            <circle cx="12" cy="12" r="7" fill="currentColor"/>
         </svg>
         <span class="tooltip">录制</span>
     </button>
@@ -375,20 +390,56 @@
             height = screen.height;
         }
 
-        openMedia(video.deviceId, audio, width, height)
-            .then(stream => {
-                videoElement.srcObject = stream;
-                if (typeof devices === "function") {
-                    devices();
-                }
-            })
-            .catch(function (e) {
-                alert(e && e.message ? e.message : String(e));
-            });
+        lastMediaArgs = {videoDeviceId: video.deviceId, audio: audio, width: width, height: height};
+        startVideo(devices, false);
 
         if (settings.usb && settings.usb.deviceId) {
             openSerial(settings.usb.deviceId, settings.mouseClickMode);
         }
+    }
+
+    let lastMediaArgs = null;
+    let videoTrack = null;
+    let videoErrorLines = null;
+
+    function startVideo(onFirstStream, quiet) {
+        if (!lastMediaArgs) {
+            return;
+        }
+        let args = lastMediaArgs;
+        videoErrorLines = null;
+        setVideoStatus("warn", ["正在打开视频…"]);
+        openMedia(args.videoDeviceId, args.audio, args.width, args.height)
+            .then(stream => {
+                videoElement.srcObject = stream;
+                bindVideoTrack(stream);
+                if (typeof onFirstStream === "function") {
+                    onFirstStream();
+                }
+            })
+            .catch(function (e) {
+                let message = e && e.message ? e.message : String(e);
+                videoTrack = null;
+                videoErrorLines = ["打开视频失败", message, "点击重试"];
+                renderVideoStatus();
+                if (!quiet) {
+                    alert(message);
+                }
+            });
+    }
+
+    // 采集卡被拔掉或没信号时轨道会 ended/muted，光看 srcObject 是看不出来的
+    function bindVideoTrack(stream) {
+        let tracks = stream.getVideoTracks();
+        videoTrack = tracks.length ? tracks[0] : null;
+        // 拿到轨道就说明上一次的失败已经过去了，否则错误会一直盖住正常状态
+        videoErrorLines = null;
+        if (videoTrack) {
+            videoTrack.addEventListener("ended", renderVideoStatus);
+            videoTrack.addEventListener("mute", renderVideoStatus);
+            videoTrack.addEventListener("unmute", renderVideoStatus);
+        }
+        renderVideoStatus();
     }
 
     function openMedia(videoDeviceId, audio, width, height) {
@@ -466,9 +517,9 @@
     let lastSerialArgs = null;
     let serialLost = false;
 
-    function setStatus(level, lines) {
-        let button = document.querySelector("#statusButton");
-        let tooltip = document.querySelector("#statusTooltip");
+    function applyStatus(buttonId, tooltipId, level, lines) {
+        let button = document.querySelector(buttonId);
+        let tooltip = document.querySelector(tooltipId);
         if (!button || !tooltip) {
             return;
         }
@@ -476,6 +527,59 @@
         button.classList.remove("status-idle", "status-ok", "status-warn", "status-error");
         button.classList.add("status-" + level);
         tooltip.innerHTML = lines.join("<br>");
+    }
+
+    function setStatus(level, lines) {
+        applyStatus("#inputStatusButton", "#inputStatusTooltip", level, lines);
+    }
+
+    function setVideoStatus(level, lines) {
+        applyStatus("#videoStatusButton", "#videoStatusTooltip", level, lines);
+    }
+
+    function renderVideoStatus() {
+        if (videoErrorLines) {
+            setVideoStatus("error", videoErrorLines);
+            return;
+        }
+        if (!videoTrack) {
+            setVideoStatus("idle", ["未打开视频", "点击重试"]);
+            return;
+        }
+        if (videoTrack.readyState === "ended") {
+            setVideoStatus("error", ["采集已中断", "采集卡可能被拔掉了", "点击重试"]);
+            return;
+        }
+        let level = "ok";
+        let lines = [];
+        let label = (videoTrack.label || "").trim();
+        // 采集卡的 label 就是设备名，但合成流会给一串随机 id，太长的就不显示了
+        lines.push(label && label.length <= 40 ? label : "视频采集");
+        if (videoTrack.muted) {
+            level = "warn";
+            lines.push("采集卡没有画面输入");
+        } else if (!videoElement.videoWidth) {
+            level = "warn";
+            lines.push("尚未收到画面");
+        } else {
+            let settings = videoTrack.getSettings();
+            lines.push(videoElement.videoWidth + "×" + videoElement.videoHeight);
+            if (settings.frameRate) {
+                lines.push(Math.round(settings.frameRate) + " fps");
+            }
+        }
+        lines.push("点击重开");
+        setVideoStatus(level, lines);
+    }
+
+    function refreshVideoStatus() {
+        // 已经断了就直接重开，正常的话只是刷新读数
+        let broken = !!videoErrorLines || !videoTrack || videoTrack.readyState === "ended";
+        if (broken) {
+            startVideo(null, true);
+            return;
+        }
+        renderVideoStatus();
     }
 
     function renderStatus(info) {
@@ -760,6 +864,11 @@
             }
         }
     }
+
+    // 画面尺寸要等元数据到了才有，所以拿到流之后还得再刷一次状态
+    ['loadedmetadata', 'resize', 'playing', 'emptied'].forEach(function (name) {
+        videoElement.addEventListener(name, renderVideoStatus);
+    });
 
     // 全屏状态可能被 F11 或 Esc 改变，不只是点按钮，所以监听事件而不是在点击里切图标
     document.addEventListener('fullscreenchange', function () {
