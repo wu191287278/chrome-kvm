@@ -840,12 +840,11 @@ function Ch9329(writer, mouseAbsolute, reader) {
         this.releaseAllKeys();
     }
 
-    this.clicked = {command: 0x00, right: false};
+    this.clicked = {command: 0x00};
     this.lastAbsX = 0;
     this.lastAbsY = 0;
     this._downAbsX = 0;
     this._downAbsY = 0;
-    this._buttonDownAt = 0;
     this._clickArmed = false;
 
     this.mouseRelativeClickLeft = function () {
@@ -853,7 +852,7 @@ function Ch9329(writer, mouseAbsolute, reader) {
         this.sendRelativePacket(0x01, 0, 0, 0);
     }
 
-    this.mouseRelativeClickRight = function mouseClickRight() {
+    this.mouseRelativeClickRight = function () {
         this.clicked.command = 0x02;
         this.sendRelativePacket(0x02, 0, 0, 0);
     }
@@ -861,11 +860,6 @@ function Ch9329(writer, mouseAbsolute, reader) {
     this.mouseRelativeClickMiddle = function () {
         this.clicked.command = 0x04;
         this.sendRelativePacket(0x04, 0, 0, 0);
-    }
-
-    this.mouseupRelative = function () {
-        this.clicked.command = 0x00;
-        this.sendRelativePacket(0x00, 0, 0, 0);
     }
 
     // CMD_SEND_MS_ABS_DATA：02 + 按键 + X(小端) + Y(小端) + 滚轮
@@ -883,69 +877,6 @@ function Ch9329(writer, mouseAbsolute, reader) {
         let packet = this.toUnit8Array(data);
         return asMove ? this.writeMove(packet) : this.write(packet);
     }
-
-    this.mouseAbsoluteClickLeft = function () {
-        this.clicked.command = 0x01;
-        this.sendAbsolutePacket(0x01, 0x00);
-    }
-
-    this.mouseAbsoluteClickRight = function mouseClickRight() {
-        this.clicked.command = 0x02;
-        this.sendAbsolutePacket(0x02, 0x00);
-    }
-
-    this.mouseAbsoluteClickMiddle = function () {
-        this.clicked.command = 0x04;
-        this.sendAbsolutePacket(0x04, 0x00);
-    }
-
-    this.mouseupAbsolute = function () {
-        if (this.clicked.command === 0x00) {
-            return;
-        }
-        // 短点击：抬起时锁回按下坐标，避免微抖被系统当成拖拽导致右键菜单不出现
-        let heldMs = Date.now() - (this._buttonDownAt || 0);
-        if (heldMs < 300) {
-            this.lastAbsX = this._downAbsX;
-            this.lastAbsY = this._downAbsY;
-        }
-        this.clicked.command = 0x00;
-        this.sendAbsolutePacket(0x00, 0x00);
-    }
-
-
-    this.mouseClickLeft = function () {
-        if (mouseAbsolute) {
-            this.mouseAbsoluteClickLeft();
-        } else {
-            this.mouseRelativeClickLeft();
-        }
-    }
-
-    this.mouseClickRight = function mouseClickRight() {
-        if (mouseAbsolute) {
-            this.mouseAbsoluteClickRight();
-        } else {
-            this.mouseRelativeClickRight();
-        }
-    }
-
-    this.mouseClickMiddle = function () {
-        if (mouseAbsolute) {
-            this.mouseAbsoluteClickMiddle();
-        } else {
-            this.mouseRelativeClickMiddle();
-        }
-    }
-
-    this.mouseup = function () {
-        if (mouseAbsolute) {
-            this.mouseupAbsolute();
-        } else {
-            this.mouseupRelative();
-        }
-    }
-
 
     this.hexHeightLow = function hexHeightLow(val) {
         let high = ((val >> 8) & 0xff); //高8位
@@ -1062,9 +993,6 @@ function Ch9329(writer, mouseAbsolute, reader) {
         this.lastAbsY = point.y;
         this._downAbsX = point.x;
         this._downAbsY = point.y;
-        this._buttonDownAt = Date.now();
-        this._pressToken = (this._pressToken || 0) + 1;
-
         // 先强制松所有键，清掉被控端可能卡住的鼠标键/修饰键残留；
         // 它会清空 _clickArmed，所以死区标记必须在它之后再置位
         this.forceReleaseAllMouse();
