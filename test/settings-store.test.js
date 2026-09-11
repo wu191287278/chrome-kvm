@@ -219,6 +219,45 @@ test("串口端口匹配", async (t) => {
     });
 });
 
+test("同一 VID/PID 有多个端口时要全部给出", async (t) => {
+    // 换个 USB 口就是另一个端口对象，Chrome 也可能还留着已失效的旧授权，
+    // 两者 VID/PID 一模一样。只返回第一个的话，撞上开不了的那个就彻底连不上。
+    let first = fakePort(6790, 29987);
+    let second = fakePort(6790, 29987);
+    let other = fakePort(1234, 5678);
+
+    await t.test("匹配项按原顺序全部返回", () => {
+        let hits = SettingsStore.matchPorts([other, first, second], {usbVendorId: 6790, usbProductId: 29987});
+        assert.deepStrictEqual(hits, [first, second]);
+    });
+
+    await t.test("一个都对不上时返回空数组而不是 null", () => {
+        assert.deepStrictEqual(SettingsStore.matchPorts([other], {usbVendorId: 6790}), []);
+    });
+
+    await t.test("筛选条件不可用时返回空数组", () => {
+        assert.deepStrictEqual(SettingsStore.matchPorts([first], null), []);
+        assert.deepStrictEqual(SettingsStore.matchPorts([first], {}), []);
+    });
+
+    await t.test("pickSerialPorts 同样给出全部候选", () => {
+        let hits = SettingsStore.pickSerialPorts([other, first, second], '{"usbVendorId":6790,"usbProductId":29987}');
+        assert.deepStrictEqual(hits, [first, second]);
+    });
+
+    await t.test("没有筛选条件且端口唯一时给出那一个", () => {
+        assert.deepStrictEqual(SettingsStore.pickSerialPorts([first], null), [first]);
+    });
+
+    await t.test("没有筛选条件且端口不唯一时一个都不给", () => {
+        assert.deepStrictEqual(SettingsStore.pickSerialPorts([first, other], null), []);
+    });
+
+    await t.test("matchPort 仍然返回第一个匹配项，设置页依赖它", () => {
+        assert.strictEqual(SettingsStore.matchPort([other, first, second], {usbVendorId: 6790}), first);
+    });
+});
+
 test("波特率排序", async (t) => {
     await t.test("上次用过的排最前", () => {
         assert.deepStrictEqual(SettingsStore.baudRateOrder(115200, [9600, 115200]), [115200, 9600]);

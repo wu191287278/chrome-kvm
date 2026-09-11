@@ -120,32 +120,46 @@ var SettingsStore = (function () {
         return !!filter && (filter.usbVendorId != null || filter.usbProductId != null);
     }
 
-    // 筛选条件里为 null 的字段当通配处理
-    function matchPort(ports, filter) {
+    // 筛选条件里为 null 的字段当通配处理。
+    // 同一颗 CH340 插到另一个 USB 口就是另一个端口对象，而 Chrome 还可能同时
+    // 列出已经不在位的旧授权——两者 VID/PID 完全一样。只认第一个的话，一旦
+    // 它正好是那个开不了的，用户就永远连不上，所以把匹配项全给出来逐个试。
+    function matchPorts(ports, filter) {
+        var hits = [];
         if (!ports || !hasUsableFilter(filter)) {
-            return null;
+            return hits;
         }
         for (var i = 0; i < ports.length; i++) {
             var info = ports[i].getInfo();
             var vendorOk = filter.usbVendorId == null || info.usbVendorId === filter.usbVendorId;
             var productOk = filter.usbProductId == null || info.usbProductId === filter.usbProductId;
             if (vendorOk && productOk) {
-                return ports[i];
+                hits.push(ports[i]);
             }
         }
-        return null;
+        return hits;
     }
 
-    function pickSerialPort(ports, deviceId) {
+    function matchPort(ports, filter) {
+        var hits = matchPorts(ports, filter);
+        return hits.length ? hits[0] : null;
+    }
+
+    function pickSerialPorts(ports, deviceId) {
         if (!ports || ports.length === 0) {
-            return null;
+            return [];
         }
         var filter = parseUsbFilter(deviceId);
         if (!hasUsableFilter(filter)) {
             // 没有可用的筛选条件时只在唯一端口下自动选，否则宁可报错也不要开错设备
-            return ports.length === 1 ? ports[0] : null;
+            return ports.length === 1 ? [ports[0]] : [];
         }
-        return matchPort(ports, filter);
+        return matchPorts(ports, filter);
+    }
+
+    function pickSerialPort(ports, deviceId) {
+        var hits = pickSerialPorts(ports, deviceId);
+        return hits.length ? hits[0] : null;
     }
 
     // 上次用过的波特率排最前，这样正常情况下第一次就能连上
@@ -170,7 +184,9 @@ var SettingsStore = (function () {
         parseUsbFilter: parseUsbFilter,
         savedUsbFilter: savedUsbFilter,
         matchPort: matchPort,
+        matchPorts: matchPorts,
         pickSerialPort: pickSerialPort,
+        pickSerialPorts: pickSerialPorts,
         baudRateOrder: baudRateOrder
     };
 })();

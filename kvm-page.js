@@ -246,13 +246,60 @@ function candidateBaudRates() {
     return SettingsStore.baudRateOrder(SettingsStore.readOrEmpty().baudRate, Ch9329.BAUD_RATES);
 }
 
+// 放弃某个备选时必须把端口还回去：串口是独占的，留着不关会把自己挡在门外
+async function releaseConnection(candidate) {
+    try {
+        await candidate.connection.ch.dispose();
+        await candidate.port.close();
+    } catch (e) {
+        console.warn("释放备选串口失败", e);
+    }
+}
+
+// 逐个试匹配到的端口：优先用能打开又能应答的，都不应答时退回仅能打开的那个
+// （那时状态栏会照实显示「芯片无应答」）。全都打不开才把错误抛出去。
+async function connectFirstWorking(candidates, mouseAbsolute) {
+    let fallback = null;
+    let lastError = null;
+    for (let i = 0; i < candidates.length; i++) {
+        let candidate;
+        try {
+            candidate = {
+                port: candidates[i],
+                connection: await Ch9329.connect(candidates[i], candidateBaudRates(), mouseAbsolute)
+            };
+        } catch (e) {
+            lastError = e;
+            continue;
+        }
+        if (candidate.connection.info) {
+            if (fallback) {
+                await releaseConnection(fallback);
+            }
+            return candidate;
+        }
+        if (fallback) {
+            await releaseConnection(candidate);
+        } else {
+            fallback = candidate;
+        }
+    }
+    if (fallback) {
+        return fallback;
+    }
+    if (lastError) {
+        throw lastError;
+    }
+    return null;
+}
+
 function openSerial(deviceId, mouseClickMode) {
     lastSerialArgs = {deviceId: deviceId, mouseClickMode: mouseClickMode};
     bindSerialLifecycle();
     navigator.serial.getPorts()
         .then(async function (ports) {
-            let port = SettingsStore.pickSerialPort(ports, deviceId);
-            if (!port) {
+            let candidates = SettingsStore.pickSerialPorts(ports, deviceId);
+            if (candidates.length === 0) {
                 // 重连途中设备还没回来是正常的，别拿弹窗打断用户
                 if (serialLost) {
                     renderStatus(null);
@@ -263,10 +310,11 @@ function openSerial(deviceId, mouseClickMode) {
             }
             let mouseAbsolute = !mouseClickMode || mouseClickMode === "absolute";
             // 芯片实际波特率以探测结果为准，设置里的值只作为首选，避免配置不同步就连不上
-            let connection = await Ch9329.connect(port, candidateBaudRates(), mouseAbsolute);
+            let candidate = await connectFirstWorking(candidates, mouseAbsolute);
+            let connection = candidate.connection;
             ch = connection.ch;
             ch.onTransportError = handleSerialLost;
-            activePort = port;
+            activePort = candidate.port;
             serialLost = false;
             currentBaudRate = connection.baudRate;
             currentBaudProbed = connection.probed !== false;
