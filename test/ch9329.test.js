@@ -478,6 +478,54 @@ test("文本输入", async function (t) {
     });
 });
 
+test("滚轮按齿数编码", async function (t) {
+    async function wheelByteOf(notches) {
+        const {chip, ch} = newChip();
+        await ch.mouseScroll(notches);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        const frames = framesOf(chip, 0x04);
+        return frames.length ? frames[0][11] : null;
+    }
+
+    await t.test("正数向上、负数向下，用补码表示", async function () {
+        assert.strictEqual(await wheelByteOf(1), 0x01, "向上 1 格");
+        assert.strictEqual(await wheelByteOf(-1), 0xFF, "向下 1 格");
+        assert.strictEqual(await wheelByteOf(3), 0x03);
+        assert.strictEqual(await wheelByteOf(-3), 0xFD);
+    });
+
+    await t.test("夹在协议允许的 ±127 齿内", async function () {
+        assert.strictEqual(await wheelByteOf(127), 0x7F);
+        assert.strictEqual(await wheelByteOf(-127), 0x81);
+        assert.strictEqual(await wheelByteOf(9999), 0x7F);
+        assert.strictEqual(await wheelByteOf(-9999), 0x81);
+    });
+
+    await t.test("零齿数不发包", async function () {
+        assert.strictEqual(await wheelByteOf(0), null);
+        assert.strictEqual(await wheelByteOf(0.4), null, "不足一格不应发包");
+    });
+
+    await t.test("滚动时保留当前按住的键", async function () {
+        const {chip, ch} = newChip();
+        ch.clicked.command = 0x01;
+        await ch.mouseScroll(-2);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        const frame = framesOf(chip, 0x04)[0];
+        assert.strictEqual(frame[6], 0x01, "左键仍按着");
+        assert.strictEqual(frame[11], 0xFE, "向下 2 格");
+    });
+
+    await t.test("相对模式下走 0x05 命令", async function () {
+        const chip = createFakeChip();
+        const ch = new Ch9329(chip.writer, false, chip.reader);
+        await ch.mouseScroll(-1);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        const frame = framesOf(chip, 0x05)[0];
+        assert.strictEqual(hex(frame), "57 ab 00 05 05 01 00 00 00 ff 0c");
+    });
+});
+
 test("串口断开", async function (t) {
     function brokenWriter() {
         return {

@@ -305,7 +305,8 @@
         }
         let filter = parseUsbFilter(deviceId);
         if (!filter || (filter.usbVendorId == null && filter.usbProductId == null)) {
-            return ports[0];
+            // 没有可用的筛选条件时只在唯一端口下自动选，否则宁可报错也不要开错设备
+            return ports.length === 1 ? ports[0] : null;
         }
         for (let i = 0; i < ports.length; i++) {
             let info = ports[i].getInfo();
@@ -517,25 +518,42 @@
             ch.keyup(event.code);
         });
 
-        let wheelSet = {};
+        // 累积滚动量再按齿数下发，保留滚动快慢；一格滚轮在 Chrome 里约 100px
+        const WHEEL_PIXELS_PER_NOTCH = 100;
+        let wheelPixels = 0;
         document.addEventListener('wheel', function (event) {
-            let delta = event.deltaY || event.detail || event.wheelDelta;
-            wheelSet["delta"] = delta;
-        });
-        setInterval(function () {
-            if (wheelSet["delta"]) {
-                ch.mouseScroll(wheelSet["delta"]);
-                wheelSet["delta"] = undefined;
+            if (!ch) {
+                return;
             }
-        }, 100)
+            let delta = event.deltaY;
+            if (event.deltaMode === 1) {
+                delta *= 16;   // 行
+            } else if (event.deltaMode === 2) {
+                delta *= 400;  // 页
+            }
+            wheelPixels += delta;
+            let notches = Math.trunc(wheelPixels / WHEEL_PIXELS_PER_NOTCH);
+            if (notches === 0) {
+                return;
+            }
+            wheelPixels -= notches * WHEEL_PIXELS_PER_NOTCH;
+            // 浏览器 deltaY 向下为正，协议齿数向上为正
+            ch.mouseScroll(-notches);
+        }, {passive: true});
 
         videoElement.addEventListener('mousemove', (event) => {
+            if (!ch) {
+                return;
+            }
             ch.mouseMove(videoElement, event.clientX, event.clientY);
         });
 
 
         videoElement.addEventListener('mousedown', (event) => {
             event.preventDefault();
+            if (!ch) {
+                return;
+            }
             let buttons = 0x00;
             if (event.button === 0) {
                 buttons = 0x01;

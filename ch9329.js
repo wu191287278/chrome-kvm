@@ -1033,17 +1033,18 @@ function Ch9329(writer, mouseAbsolute, reader) {
         this.sendRelativePacket(0x00, 0, 0, 0);
     }
 
-    // 协议：0x01-0x7F 向上滚动，0x81-0xFF 向下滚动（齿数）
-    this.mouseScroll = function (detail) {
-        if (detail === 0) {
+    // notches 为有符号齿数，正数向上、负数向下；
+    // 协议用补码表示：0x01-0x7F 向上，0x81-0xFF 向下，单位都是齿数
+    this.mouseScroll = function (notches) {
+        let count = Math.trunc(notches) || 0;
+        if (count === 0) {
             return;
         }
-        let wheel = detail > 0 ? 0xFF : 0x01;
+        let wheel = this.clamp(count, -127, 127) & 0xff;
         if (mouseAbsolute) {
-            this.sendAbsolutePacket(this.clicked.command, wheel);
-            return;
+            return this.sendAbsolutePacket(this.clicked.command, wheel);
         }
-        this.sendRelativePacket(this.clicked.command, 0, 0, wheel);
+        return this.sendRelativePacket(this.clicked.command, 0, 0, wheel);
     }
 }
 
