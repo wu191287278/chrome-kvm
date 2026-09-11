@@ -1,6 +1,16 @@
 function Ch9329(writer, mouseAbsolute, reader) {
-    this._writeChain = Promise.resolve();
+    // 协议 V1.3：主从式，每条命令都应等待芯片应答（原命令码 | 0x80 成功，| 0xC0 出错）
+    this.ADDR = 0x00;
+    this.ACK_TIMEOUT_MS = 500;
     this._rxBuffer = new Uint8Array(0);
+    this._frameWaiters = [];
+    this._queue = [];
+    this._queueRunning = false;
+    this._movePending = null;
+    this._moveQueued = false;
+    this._readLoopStarted = false;
+    this._ackSupported = true;
+    this._ackMisses = 0;
     this.keyboardMapping = {
         8: 0x2A,  // Back
         9: 0x2B,  // Tab
@@ -327,10 +337,11 @@ function Ch9329(writer, mouseAbsolute, reader) {
 
     this.pressedKeys = [];
 
+    // SUM = HEAD + ADDR + CMD + LEN + DATA，取低 8 位
     this.toUnit8Array = function (data) {
-        let sum = 2
-        for (let i = 2; i < data.length; i++) {
-            sum = sum + data[i];
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+            sum = (sum + data[i]) & 0xff;
         }
         data.push(sum);
         return new Uint8Array(data);
@@ -347,7 +358,7 @@ function Ch9329(writer, mouseAbsolute, reader) {
     }
 
     this.syncKeyboard = function () {
-        let data = [0x57, 0xAB, 0x00, 0x02, 0x08, this.getModifierByte(), 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let data = [0x57, 0xAB, this.ADDR, 0x02, 0x08, this.getModifierByte(), 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
         for (let i = 0; i < Math.min(6, this.pressedKeys.length); i++) {
             data[7 + i] = this.pressedKeys[i];
         }
@@ -408,69 +419,207 @@ function Ch9329(writer, mouseAbsolute, reader) {
         this._rxBuffer = next;
     }
 
-    this._tryParseFrame = function (expectCmd) {
+    // 解析一帧：57 AB ADDR CMD LEN DATA SUM，校验和不符则丢弃该帧头继续找
+    this._shiftFrame = function () {
         let buf = this._rxBuffer;
-        for (let i = 0; i < buf.length - 5; i++) {
+        for (let i = 0; i + 6 <= buf.length; i++) {
             if (buf[i] !== 0x57 || buf[i + 1] !== 0xAB) {
                 continue;
             }
             let len = buf[i + 4];
             let total = 6 + len;
             if (i + total > buf.length) {
+                if (i > 0) {
+                    this._rxBuffer = buf.slice(i);
+                }
                 return null;
             }
-            let cmd = buf[i + 3];
-            let data = buf.slice(i + 5, i + 5 + len);
-            this._rxBuffer = buf.slice(i + total);
-            if (expectCmd == null || cmd === expectCmd) {
-                return {cmd: cmd, data: data};
+            let sum = 0;
+            for (let k = i; k < i + total - 1; k++) {
+                sum = (sum + buf[k]) & 0xff;
             }
+            if (sum !== buf[i + total - 1]) {
+                this._rxBuffer = buf.slice(i + 2);
+                return this._shiftFrame();
+            }
+            let frame = {cmd: buf[i + 3], data: buf.slice(i + 5, i + 5 + len)};
+            this._rxBuffer = buf.slice(i + total);
+            return frame;
         }
-        // 丢掉无法对齐的前缀，避免缓冲区堵死
-        if (buf.length > 64) {
-            this._rxBuffer = buf.slice(buf.length - 64);
+        if (buf.length > 512) {
+            this._rxBuffer = buf.slice(buf.length - 512);
         }
         return null;
     }
 
-    this._readFrame = async function (expectCmd, timeoutMs) {
-        if (!reader) {
+    this._dispatchFrames = function () {
+        let frame = this._shiftFrame();
+        while (frame) {
+            let waiter = this._frameWaiters.shift();
+            if (waiter) {
+                waiter(frame);
+            }
+            frame = this._shiftFrame();
+        }
+    }
+
+    this._startReadLoop = async function () {
+        if (!reader || this._readLoopStarted) {
+            return;
+        }
+        this._readLoopStarted = true;
+        try {
+            while (true) {
+                let result = await reader.read();
+                if (result.done) {
+                    break;
+                }
+                this._appendRx(result.value);
+                this._dispatchFrames();
+            }
+        } catch (e) {
+            // 串口关闭或读取中断，后续命令降级为「不等应答」
+        }
+        this._readLoopStarted = false;
+    }
+
+    this._waitFrame = function (timeoutMs) {
+        let self = this;
+        return new Promise(function (resolve) {
+            let done = false;
+            let timer = setTimeout(function () {
+                if (done) {
+                    return;
+                }
+                done = true;
+                let index = self._frameWaiters.indexOf(waiter);
+                if (index !== -1) {
+                    self._frameWaiters.splice(index, 1);
+                }
+                resolve(null);
+            }, timeoutMs);
+            function waiter(frame) {
+                if (done) {
+                    return;
+                }
+                done = true;
+                clearTimeout(timer);
+                resolve(frame);
+            }
+            self._frameWaiters.push(waiter);
+        });
+    }
+
+    // 发一条命令并等待应答；连续拿不到应答就降级为「只发不等」，避免每包都空等 500ms
+    this._transfer = async function (packet, retries) {
+        let cmd = packet[3];
+        let attempts = (retries == null ? 1 : retries) + 1;
+        for (let attempt = 0; attempt < attempts; attempt++) {
+            try {
+                await writer.write(packet);
+            } catch (e) {
+                return null;
+            }
+            if (!reader || !this._ackSupported) {
+                return null;
+            }
+            this._startReadLoop();
+            let frame = await this._waitFrame(this.ACK_TIMEOUT_MS);
+            if (!frame) {
+                this._ackMisses++;
+                if (this._ackMisses >= 3) {
+                    this._ackSupported = false;
+                    console.warn("CH9329 连续无应答，已切换为不等应答发送");
+                    return null;
+                }
+                continue;
+            }
+            this._ackMisses = 0;
+            if (frame.cmd === (cmd | 0x80)) {
+                return frame;
+            }
+            if (frame.cmd === (cmd | 0xC0)) {
+                // 芯片拒收（0xE1 超时 / 0xE2 帧头 / 0xE3 命令 / 0xE4 校验 / 0xE5 参数 / 0xE6 执行失败）
+                console.warn("CH9329 命令出错", "cmd=0x" + cmd.toString(16), "status=0x" + (frame.data[0] || 0).toString(16));
+                continue;
+            }
+            return frame;
+        }
+        return null;
+    }
+
+    this._runQueue = async function () {
+        if (this._queueRunning) {
+            return;
+        }
+        this._queueRunning = true;
+        while (this._queue.length) {
+            let job = this._queue.shift();
+            let packet = job.build ? job.build() : job.packet;
+            let frame = packet ? await this._transfer(packet, job.retries) : null;
+            if (job.resolve) {
+                job.resolve(frame);
+            }
+        }
+        this._queueRunning = false;
+    }
+
+    this._enqueue = function (job) {
+        let self = this;
+        return new Promise(function (resolve) {
+            job.resolve = resolve;
+            self._queue.push(job);
+            self._runQueue();
+        });
+    }
+
+    // 按键等关键包：允许一次重发
+    this.write = function (packet) {
+        return this._enqueue({packet: packet, retries: 1});
+    }
+
+    // 移动包：队列中只保留最新一个，避免 9600bps 下淹没按键包
+    this.writeMove = function (packet) {
+        this._movePending = packet;
+        if (this._moveQueued) {
+            return Promise.resolve(null);
+        }
+        this._moveQueued = true;
+        let self = this;
+        return this._enqueue({
+            retries: 0,
+            build: function () {
+                self._moveQueued = false;
+                let pending = self._movePending;
+                self._movePending = null;
+                return pending;
+            }
+        });
+    }
+
+    this.getInfo = async function () {
+        let frame = await this._enqueue({
+            packet: this.toUnit8Array([0x57, 0xAB, this.ADDR, 0x01, 0x00]),
+            retries: 1
+        });
+        if (!frame || frame.cmd !== 0x81 || !frame.data || frame.data.length < 4) {
             return null;
         }
-        let deadline = Date.now() + (timeoutMs || 300);
-        while (Date.now() < deadline) {
-            let parsed = this._tryParseFrame(expectCmd);
-            if (parsed) {
-                return parsed;
-            }
-            let wait = deadline - Date.now();
-            if (wait <= 0) {
-                break;
-            }
-            let result = await Promise.race([
-                reader.read(),
-                new Promise(function (resolve) {
-                    setTimeout(function () {
-                        resolve({timeout: true});
-                    }, wait);
-                })
-            ]);
-            if (result.timeout || result.done) {
-                break;
-            }
-            this._appendRx(result.value);
-        }
-        return this._tryParseFrame(expectCmd);
+        let version = frame.data[0];
+        let led = frame.data[2];
+        return {
+            version: "V" + (version >> 4) + "." + (version & 0x0f),
+            usbConnected: frame.data[1] === 0x01,
+            numLock: (led & 0x01) !== 0,
+            capsLock: (led & 0x02) !== 0,
+            scrollLock: (led & 0x04) !== 0,
+            asleep: frame.data[3] === 0x03
+        };
     }
 
     this.queryCapsLock = async function () {
-        await this.write(this.toUnit8Array([0x57, 0xAB, 0x00, 0x01, 0x00]));
-        await this._writeChain;
-        let frame = await this._readFrame(0x81, 300);
-        if (!frame || !frame.data || frame.data.length < 3) {
-            return null;
-        }
-        return (frame.data[2] & 0x02) !== 0;
+        let info = await this.getInfo();
+        return info ? info.capsLock : null;
     }
 
     this.ensureCapsLockOff = async function () {
@@ -524,17 +673,22 @@ function Ch9329(writer, mouseAbsolute, reader) {
         return null;
     }
 
-    this.tapKey = function (code, shift) {
-        let self = this;
-        return new Promise(function (resolve) {
-            let mod = shift ? 0x02 : 0x00;
-            let data = [0x57, 0xAB, 0x00, 0x02, 0x08, mod, 0x00, code, 0x00, 0x00, 0x00, 0x00, 0x00];
-            self.write(self.toUnit8Array(data));
-            setTimeout(function () {
-                self.write(self.keyboardReleasePacket);
-                setTimeout(resolve, 25);
-            }, 35);
-        });
+    // 协议要求「按下包 + 释放包」成对；有应答时按应答节奏推进，无应答时补一点间隔
+    this.tapKey = async function (code, shift) {
+        let mod = shift ? 0x02 : 0x00;
+        let data = [0x57, 0xAB, this.ADDR, 0x02, 0x08, mod, 0x00, code, 0x00, 0x00, 0x00, 0x00, 0x00];
+        let acked = await this.write(this.toUnit8Array(data));
+        if (!acked) {
+            await new Promise(function (resolve) {
+                setTimeout(resolve, 20);
+            });
+        }
+        await this.write(this.keyboardReleasePacket);
+        if (!acked) {
+            await new Promise(function (resolve) {
+                setTimeout(resolve, 20);
+            });
+        }
     }
 
     this.typeText = async function (text) {
@@ -561,14 +715,11 @@ function Ch9329(writer, mouseAbsolute, reader) {
         return {typed: typed, skipped: skipped, capsToggled: capsToggled};
     }
 
-    this.sendCtrlAltDelete = function () {
-        // LeftCtrl|LeftAlt + Delete
-        let data = [0x57, 0xAB, 0x00, 0x02, 0x08, 0x05, 0x00, 0x4C, 0x00, 0x00, 0x00, 0x00, 0x00];
-        this.write(this.toUnit8Array(data));
-        let self = this;
-        setTimeout(function () {
-            self.releaseAllKeys();
-        }, 50);
+    this.sendCtrlAltDelete = async function () {
+        // 修饰位：bit0 LCtrl | bit2 LAlt = 0x05，普通键 Delete = 0x4C
+        let data = [0x57, 0xAB, this.ADDR, 0x02, 0x08, 0x05, 0x00, 0x4C, 0x00, 0x00, 0x00, 0x00, 0x00];
+        await this.write(this.toUnit8Array(data));
+        this.releaseAllKeys();
     }
 
     this.clicked = {command: 0x00, right: false};
@@ -577,46 +728,42 @@ function Ch9329(writer, mouseAbsolute, reader) {
     this._downAbsX = 0;
     this._downAbsY = 0;
     this._buttonDownAt = 0;
-    this._lastMoveSentAt = 0;
     this._clickArmed = false;
 
     this.mouseRelativeClickLeft = function () {
-        let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x01, 0x00, 0x00, 0x00];
-        let packet = this.toUnit8Array(data);
-        this.write(packet);
         this.clicked.command = 0x01;
+        this.sendRelativePacket(0x01, 0, 0, 0);
     }
 
     this.mouseRelativeClickRight = function mouseClickRight() {
-        let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x02, 0x00, 0x00, 0x00];
-        let packet = this.toUnit8Array(data);
-        this.write(packet);
         this.clicked.command = 0x02;
+        this.sendRelativePacket(0x02, 0, 0, 0);
     }
 
     this.mouseRelativeClickMiddle = function () {
-        let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x04, 0x00, 0x00, 0x00];
-        let packet = this.toUnit8Array(data);
-        this.write(packet);
         this.clicked.command = 0x04;
+        this.sendRelativePacket(0x04, 0, 0, 0);
     }
 
     this.mouseupRelative = function () {
-        if (this.clicked.command === 0x00) {
-            return;
-        }
-        let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00];
-        let packet = this.toUnit8Array(data);
-        this.write(packet);
         this.clicked.command = 0x00;
+        this.sendRelativePacket(0x00, 0, 0, 0);
     }
 
-    this.sendAbsolutePacket = function (buttons, wheel) {
+    // CMD_SEND_MS_ABS_DATA：02 + 按键 + X(小端) + Y(小端) + 滚轮
+    this.sendAbsolutePacket = function (buttons, wheel, asMove) {
         let xHighLow = this.hexHeightLow(this.lastAbsX);
         let yHighLow = this.hexHeightLow(this.lastAbsY);
-        let data = [0x57, 0xAB, 0x00, 0x04, 0x07, 0x02, buttons, xHighLow[0], xHighLow[1], yHighLow[0], yHighLow[1], wheel & 0xff];
+        let data = [0x57, 0xAB, this.ADDR, 0x04, 0x07, 0x02, buttons, xHighLow[0], xHighLow[1], yHighLow[0], yHighLow[1], wheel & 0xff];
         let packet = this.toUnit8Array(data);
-        this.write(packet);
+        return asMove ? this.writeMove(packet) : this.write(packet);
+    }
+
+    // CMD_SEND_MS_REL_DATA：01 + 按键 + dx + dy + 滚轮（dx/dy 为补码，范围 -127..127）
+    this.sendRelativePacket = function (buttons, dx, dy, wheel, asMove) {
+        let data = [0x57, 0xAB, this.ADDR, 0x05, 0x05, 0x01, buttons, dx & 0xff, dy & 0xff, wheel & 0xff];
+        let packet = this.toUnit8Array(data);
+        return asMove ? this.writeMove(packet) : this.write(packet);
     }
 
     this.mouseAbsoluteClickLeft = function () {
@@ -722,9 +869,10 @@ function Ch9329(writer, mouseAbsolute, reader) {
         let ny = (clientY - content.top) / content.height;
         nx = this.clamp(nx, 0, 1);
         ny = this.clamp(ny, 0, 1);
+        // 协议：X = 4096 * x / X_MAX，上限收到 4095 以免越过 12 位坐标域
         return {
-            x: Math.floor(nx * 4095),
-            y: Math.floor(ny * 4095)
+            x: this.clamp(Math.floor(nx * 4096), 0, 4095),
+            y: this.clamp(Math.floor(ny * 4096), 0, 4095)
         };
     }
 
@@ -732,11 +880,9 @@ function Ch9329(writer, mouseAbsolute, reader) {
         this.clicked.command = 0x00;
         this._clickArmed = false;
         if (mouseAbsolute) {
-            this.sendAbsolutePacket(0x00, 0x00);
-            return;
+            return this.sendAbsolutePacket(0x00, 0x00);
         }
-        let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00];
-        this.write(this.toUnit8Array(data));
+        return this.sendRelativePacket(0x00, 0, 0, 0);
     }
 
     this.forceReleaseAllInput = function () {
@@ -746,10 +892,27 @@ function Ch9329(writer, mouseAbsolute, reader) {
 
     this.mouseMove = function (videoEl, clientX, clientY) {
         let point = this.mapToAbsolute(videoEl, clientX, clientY);
-        // 相对模式未实现相对移动；禁止再发绝对包，避免冲掉相对按键状态（尤其是右键）
+
         if (!mouseAbsolute) {
+            // 相对模式：按视口位移下发 dx/dy，协议限定单包 -127..127
+            if (this._lastClientX == null) {
+                this._lastClientX = clientX;
+                this._lastClientY = clientY;
+                return;
+            }
+            let rdx = this.clamp(Math.round(clientX - this._lastClientX), -127, 127);
+            let rdy = this.clamp(Math.round(clientY - this._lastClientY), -127, 127);
+            this._lastClientX = clientX;
+            this._lastClientY = clientY;
             this.lastAbsX = point.x;
             this.lastAbsY = point.y;
+            if (rdx === 0 && rdy === 0) {
+                return;
+            }
+            if (this.clicked.command !== 0x00 && this._clickArmed) {
+                this._clickArmed = false;
+            }
+            this.sendRelativePacket(this.clicked.command, rdx, rdy, 0, true);
             return;
         }
 
@@ -767,21 +930,16 @@ function Ch9329(writer, mouseAbsolute, reader) {
         if (point.x === this.lastAbsX && point.y === this.lastAbsY) {
             return;
         }
-        let now = Date.now();
-        // 9600 串口吞吐有限：移动包节流，避免淹没按键抬起包
-        if (now - this._lastMoveSentAt < 25) {
-            this.lastAbsX = point.x;
-            this.lastAbsY = point.y;
-            return;
-        }
         this.lastAbsX = point.x;
         this.lastAbsY = point.y;
-        this._lastMoveSentAt = now;
-        this.sendAbsolutePacket(this.clicked.command, 0x00);
+        // 队列只保留最新一个移动包，按键包不会被移动流淹没
+        this.sendAbsolutePacket(this.clicked.command, 0x00, true);
     }
 
     this.mouseButtonDown = function (videoEl, clientX, clientY, buttons) {
         let point = this.mapToAbsolute(videoEl, clientX, clientY);
+        this._lastClientX = clientX;
+        this._lastClientY = clientY;
         this.lastAbsX = point.x;
         this.lastAbsY = point.y;
         this._downAbsX = point.x;
@@ -825,10 +983,10 @@ function Ch9329(writer, mouseAbsolute, reader) {
             this.sendAbsolutePacket(0x00, 0x00);
             return;
         }
-        let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x00, 0x00, 0x00, 0x00];
-        this.write(this.toUnit8Array(data));
+        this.sendRelativePacket(0x00, 0, 0, 0);
     }
 
+    // 协议：0x01-0x7F 向上滚动，0x81-0xFF 向下滚动（齿数）
     this.mouseScroll = function (detail) {
         if (detail === 0) {
             return;
@@ -838,17 +996,6 @@ function Ch9329(writer, mouseAbsolute, reader) {
             this.sendAbsolutePacket(this.clicked.command, wheel);
             return;
         }
-        let data = [0x57, 0xAB, 0x00, 0x05, 0x05, 0x01, 0x00, 0x00, 0x00, wheel];
-        let packet = this.toUnit8Array(data);
-        this.write(packet);
-    }
-
-    this.write = function (packet) {
-        // 串行化写入；按钮包插到队前逻辑用独立链仍保序，但缩短 catch 吞错后的空洞
-        let next = function () {
-            return writer.write(packet);
-        };
-        this._writeChain = this._writeChain.then(next, next);
-        return this._writeChain;
+        this.sendRelativePacket(this.clicked.command, 0, 0, wheel);
     }
 }

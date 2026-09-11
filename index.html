@@ -313,6 +313,18 @@
                 let mouseAbsolute = !mouseClickMode || mouseClickMode === "absolute";
                 ch = new Ch9329(writer, mouseAbsolute, reader);
                 open();
+                // 协议 GET_INFO：确认芯片在线、USB 已枚举、未进入休眠
+                let info = await ch.getInfo();
+                if (!info) {
+                    console.warn("CH9329 未应答 GET_INFO，命令将退化为不等应答发送");
+                    return;
+                }
+                console.log("CH9329", info);
+                if (!info.usbConnected) {
+                    alert("CH9329 的 USB 未被被控端枚举，请检查接到被控机的 USB 线。");
+                } else if (info.asleep) {
+                    alert("被控端 USB 处于休眠状态，需先唤醒目标机。");
+                }
             })
             .catch(function (e) {
                 alert(e && e.message ? e.message : String(e));
