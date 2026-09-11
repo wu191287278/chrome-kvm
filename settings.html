@@ -101,7 +101,9 @@
             padding: 9px 32px 9px 10px;
             font: inherit;
             color: #e4e4e7;
-            background-color: rgba(255, 255, 255, 0.06);
+            /* 必须是不透明色：半透明底会被 Chrome 合成到白底上，
+               弹出列表就变成近白，而选项文字还是浅色，等于看不见 */
+            background-color: #2e2e31;
             border: 1px solid rgba(255, 255, 255, 0.12);
             border-radius: 8px;
             cursor: pointer;
@@ -113,6 +115,12 @@
             background-position: right 10px center;
             background-size: 14px;
             transition: border-color 0.15s, background-color 0.15s;
+        }
+
+        /* 弹出列表里每一行的配色靠 option 自己定，select 上的设置管不到 */
+        select option {
+            color: #e4e4e7;
+            background-color: #26262a;
         }
 
         select:hover {
