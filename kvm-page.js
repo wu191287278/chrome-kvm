@@ -407,13 +407,65 @@ function toggleFullScreen() {
     videoElement.addEventListener(name, renderVideoStatus);
 });
 
-// 全屏状态可能被 F11 或 Esc 改变，不只是点按钮，所以监听事件而不是在点击里切图标
+// Win、Alt+Tab、Esc、Ctrl+W 这些键默认被本机的浏览器和系统吃掉，光靠
+// preventDefault 拦不住，根本到不了被控端。Keyboard Lock 能把它们截下来，
+// 但只对 JS 发起的全屏生效（按 F11 进的全屏不算）。
+let keyboardLocked = false;
+
+function keyboardLockSupported() {
+    return !!(navigator.keyboard && navigator.keyboard.lock);
+}
+
+function lockKeyboard() {
+    if (!keyboardLockSupported()) {
+        return Promise.resolve(false);
+    }
+    // 不传参数就是锁全部按键；Chrome 保留「长按 Esc 两秒」作为逃生口，
+    // 所以短按 Esc 会照常发给被控端，正好是 BIOS 里要用的
+    return navigator.keyboard.lock()
+        .then(function () {
+            return true;
+        })
+        .catch(function (e) {
+            console.warn("键盘锁定失败，系统快捷键仍会被本机拦截", e);
+            return false;
+        });
+}
+
+function renderFullscreenStatus() {
+    let status = StatusText.describeFullscreen({
+        fullscreen: !!document.fullscreenElement,
+        keyboardLocked: keyboardLocked,
+        lockSupported: keyboardLockSupported()
+    });
+    document.querySelector('#fullscreenTooltip').innerHTML = status.lines.join("<br>");
+    document.querySelector('#fullscreenButton').setAttribute('aria-label', status.label);
+}
+
+// 退出全屏可能是点按钮、按 Esc、或者被浏览器强制退出，所以统一监听事件，
+// 而不是在点击里切状态（F11 的全屏不走 Fullscreen API，不会触发这里）
 document.addEventListener('fullscreenchange', function () {
     let full = !!document.fullscreenElement;
     document.body.classList.toggle('is-fullscreen', full);
-    document.querySelector('#fullscreenTooltip').innerText = full ? '退出全屏' : '全屏';
-    document.querySelector('#fullscreenButton').setAttribute('aria-label', full ? '退出全屏' : '全屏');
+
+    if (!full) {
+        if (keyboardLockSupported()) {
+            navigator.keyboard.unlock();
+        }
+        keyboardLocked = false;
+        renderFullscreenStatus();
+        return;
+    }
+
+    // 先按「还没锁上」渲染一次，锁定是异步的，成了再刷新
+    renderFullscreenStatus();
+    lockKeyboard().then(function (locked) {
+        keyboardLocked = locked;
+        renderFullscreenStatus();
+    });
 });
+
+renderFullscreenStatus();
 
 let mediaRecorder;
 

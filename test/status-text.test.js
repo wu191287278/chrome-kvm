@@ -177,6 +177,43 @@ test("键鼠状态文案", async (t) => {
     });
 });
 
+test("全屏与键盘锁定文案", async (t) => {
+    await t.test("没全屏时提示进全屏能捕获系统键", () => {
+        let status = StatusText.describeFullscreen({fullscreen: false, lockSupported: true});
+        assert.strictEqual(status.label, "全屏");
+        assert.ok(status.lines.some(function (line) { return line.indexOf("Win") !== -1; }));
+    });
+
+    await t.test("浏览器不支持键盘锁定时就别画饼", () => {
+        let status = StatusText.describeFullscreen({fullscreen: false, lockSupported: false});
+        assert.deepStrictEqual(status.lines, ["全屏"]);
+    });
+
+    await t.test("锁定成功时说明已捕获，并告诉用户怎么退出", () => {
+        let status = StatusText.describeFullscreen({
+            fullscreen: true, keyboardLocked: true, lockSupported: true
+        });
+        assert.strictEqual(status.label, "退出全屏");
+        assert.ok(status.lines.some(function (line) { return line.indexOf("已捕获") !== -1; }));
+        assert.ok(status.lines.some(function (line) { return line.indexOf("长按 Esc") !== -1; }),
+            "不写清楚逃生口用户会以为退不出去");
+    });
+
+    await t.test("全屏了但没锁上（比如 F11 进的）要如实说明", () => {
+        let status = StatusText.describeFullscreen({
+            fullscreen: true, keyboardLocked: false, lockSupported: true
+        });
+        assert.ok(status.lines.some(function (line) { return line.indexOf("未捕获") !== -1; }));
+    });
+
+    await t.test("不支持的浏览器全屏后不提任何捕获相关的话", () => {
+        let status = StatusText.describeFullscreen({
+            fullscreen: true, keyboardLocked: false, lockSupported: false
+        });
+        assert.deepStrictEqual(status.lines, ["退出全屏"]);
+    });
+});
+
 test("录像文件名", async (t) => {
     await t.test("按本地时间拼出 yyyymmdd-hhmmss.webm", () => {
         let at = new Date(2026, 8, 11, 14, 5, 3);

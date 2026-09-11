@@ -30,6 +30,7 @@ function Ch9329(writer, mouseAbsolute, reader) {
         "AltLeft": false,  // LAlt
         "AltRight": false,  // Ralt
         "MetaLeft": false,  // LWin
+        "MetaRight": false,  // RWin
     }
 
 
@@ -973,7 +974,7 @@ Ch9329.KEYBOARD_MAP = {
     "KeyY": 0x1C,  // Y
     "KeyZ": 0x1D,  // Z
     "MetaLeft": 0xE3,  // LWin
-    // 93: 0x65,  // Applications
+    "ContextMenu": 0x65,  // 菜单键（HID Keyboard Application）
     "Numpad0": 0x62,  // NumPad 0
     "Numpad1": 0x59,  // NumPad 1
     "Numpad2": 0x5A,  // NumPad 2
@@ -1104,6 +1105,7 @@ Ch9329.CONTROL_KEY_MAP = {
     "AltLeft": 0xE2,  // LAlt
     "AltRight": 0xE6,  // Ralt
     "MetaLeft": 0xE3,  // LWin
+    "MetaRight": 0xE7,  // RWin
 };
 
 // 修饰键 -> USB HID 修饰位

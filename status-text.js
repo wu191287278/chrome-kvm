@@ -84,6 +84,29 @@ var StatusText = (function () {
         return {level: level, lines: lines};
     }
 
+    // state: {fullscreen, keyboardLocked, lockSupported}
+    function describeFullscreen(state) {
+        if (!state.fullscreen) {
+            var lines = ["全屏"];
+            if (state.lockSupported) {
+                // 进全屏之前就告诉用户有这个好处，不然没人会想到
+                lines.push("可捕获 Win、Alt+Tab 等系统键");
+            }
+            return {label: "全屏", lines: lines};
+        }
+
+        var full = ["退出全屏"];
+        if (state.keyboardLocked) {
+            full.push("系统快捷键已捕获");
+            // Chrome 留的逃生口，不说清楚用户会以为退不出去
+            full.push("长按 Esc 两秒退出");
+        } else if (state.lockSupported) {
+            // 多半是 F11 进的全屏：键盘锁定只认 JS 发起的全屏
+            full.push("系统快捷键未捕获");
+        }
+        return {label: "退出全屏", lines: full};
+    }
+
     // 录像文件名用本地时间，方便对着操作时间找文件
     function recordFileName(date) {
         var at = date || new Date();
@@ -105,6 +128,7 @@ var StatusText = (function () {
         MAX_LABEL_LENGTH: MAX_LABEL_LENGTH,
         describeVideo: describeVideo,
         describeSerial: describeSerial,
+        describeFullscreen: describeFullscreen,
         recordFileName: recordFileName
     };
 })();

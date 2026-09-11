@@ -241,6 +241,37 @@ test("键盘状态机", async function (t) {
         }
     });
 
+    await t.test("修饰键走 keydown 也要认得出来", function () {
+        // 上面那个用例直接改 controlKeyDown，绕过了查表；
+        // 少一条映射时它照样通过，所以这里必须走真实入口
+        const keys = [
+            "ControlLeft", "ShiftLeft", "AltLeft", "MetaLeft",
+            "ControlRight", "ShiftRight", "AltRight", "MetaRight"
+        ];
+        for (const key of keys) {
+            const {ch} = newChip();
+            ch.keydown(key);
+            assert.notStrictEqual(ch.getModifierByte(), 0x00, key + " 按下后修饰位应该有值");
+            assert.deepStrictEqual(ch.pressedKeys, [], key + " 是修饰键，不该占普通键位");
+            ch.keyup(key);
+            assert.strictEqual(ch.getModifierByte(), 0x00, key + " 松开后修饰位应清零");
+        }
+    });
+
+    await t.test("全屏下被键盘锁定截获的系统键都能发出去", async function () {
+        // 这些键平时被浏览器或系统吃掉，开了 Keyboard Lock 才会送到页面，
+        // 查表里必须有对应条目，否则捕获了也是白捕获
+        const cases = [
+            ["Escape", 0x29], ["Tab", 0x2B], ["F11", 0x44],
+            ["Delete", 0x4C], ["PrintScreen", 0x46], ["ContextMenu", 0x65]
+        ];
+        for (const [key, usage] of cases) {
+            const {ch} = newChip();
+            ch.keydown(key);
+            assert.deepStrictEqual(ch.pressedKeys, [usage], key + " 应映射到 0x" + usage.toString(16));
+        }
+    });
+
     await t.test("组合键 Ctrl+Shift+A", async function () {
         const {chip, ch} = newChip();
         ch.keydown("ControlLeft");
