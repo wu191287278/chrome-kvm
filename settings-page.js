@@ -1,0 +1,296 @@
+// 设置页的页面逻辑：枚举设备、填下拉框、写波特率、存配置。
+async function authUsb() {
+    await navigator.serial.requestPort();
+    window.location.reload();
+}
+
+async function authMedia() {
+    navigator.mediaDevices.getUserMedia({video: true, audio: true})
+        .then((stream) => {
+            window.location.reload();
+        })
+}
+
+// 内置摄像头/麦克风一般不是采集卡，默认收起来减少干扰。
+// 注意中文 Windows 会把音频输入命名成「麦克风 (设备名)」，采集卡也可能中招
+const BUILTIN_HINTS = {
+    videoinput: ["facetime", "相机", "microsoft"],
+    audioinput: ["麦克风", "microsoft"]
+};
+
+function looksBuiltIn(device) {
+    let hints = BUILTIN_HINTS[device.kind] || [];
+    let label = (device.label || "").toLowerCase();
+    for (let i = 0; i < hints.length; i++) {
+        if (label.indexOf(hints[i]) !== -1) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// 过滤只是便利：已保存的设备一定保留，全被过滤光时退回完整列表，
+// 否则会出现「设置里引用的设备在下拉框里根本选不到」
+function devicesForKind(devices, kind, savedDeviceId) {
+    let all = devices.filter(function (device) {
+        return device.kind === kind;
+    });
+    let visible = all.filter(function (device) {
+        return !looksBuiltIn(device) || device.deviceId === savedDeviceId;
+    });
+    return visible.length ? visible : all;
+}
+
+function fillDeviceOptions(selector, list, savedDeviceId) {
+    for (let i = 0; i < list.length; i++) {
+        let device = list[i];
+        let option = document.createElement("option");
+        option.setAttribute("value", device.deviceId);
+        option.innerText = device.label || ("未命名设备 " + String(device.deviceId).slice(0, 8));
+        if (savedDeviceId && device.deviceId === savedDeviceId) {
+            option.setAttribute("selected", "selected");
+        }
+        selector.appendChild(option);
+    }
+}
+
+function renderMedia() {
+    navigator.mediaDevices.enumerateDevices().then(devices => {
+        let videoSelector = document.querySelector("#choice1");
+        let audioSelector = document.querySelector("#choice3");
+        let settings = SettingsStore.readOrEmpty();
+
+        let savedVideo = settings.video && settings.video.deviceId;
+        let savedAudio = settings.audio && settings.audio.deviceId;
+        fillDeviceOptions(videoSelector, devicesForKind(devices, "videoinput", savedVideo), savedVideo);
+        fillDeviceOptions(audioSelector, devicesForKind(devices, "audioinput", savedAudio), savedAudio);
+
+        let resolutionElement = document.querySelector("#choice4");
+        if (settings.resolution && settings.resolution.width && settings.resolution.height) {
+            for (let i = 0; i < resolutionElement.options.length; i++) {
+                let option = resolutionElement.options[i];
+                if (option.value === settings.resolution.width + "x" + settings.resolution.height) {
+                    option.setAttribute("selected", "selected");
+                }
+            }
+        }
+
+    })
+}
+
+function renderUsb() {
+    let settings = SettingsStore.readOrEmpty();
+    navigator.serial.getPorts()
+        .then((ports) => {
+            let selector = document.querySelector("#choice2");
+            let saved = SettingsStore.savedUsbFilter(settings);
+            for (let i = 0; i < ports.length; i++) {
+                let port = ports[i];
+                let info = port.getInfo();
+                let htmlOptionElement = document.createElement("option");
+                htmlOptionElement.setAttribute("value", JSON.stringify(info));
+                htmlOptionElement.innerText = "usbProductId=" + info.usbProductId + "," + "usbVendorId=" + info.usbVendorId;
+                if (saved
+                    && saved.usbVendorId === info.usbVendorId
+                    && saved.usbProductId === info.usbProductId) {
+                    htmlOptionElement.setAttribute("selected", "selected");
+                }
+                selector.appendChild(htmlOptionElement);
+            }
+        })
+        .catch(e => {
+            alert(e.message);
+        })
+
+    if (settings.mouseClickMode) {
+        let selector = document.querySelector("#choice5");
+        for (let i = 0; i < selector.options.length; i++) {
+            let option = selector.options[i];
+            if (option.value === settings.mouseClickMode) {
+                option.setAttribute("selected", "selected");
+            }
+        }
+    }
+
+    let baudSelector = document.querySelector("#choice6");
+    for (let i = 0; i < baudSelector.options.length; i++) {
+        let option = baudSelector.options[i];
+        if (parseInt(option.value) === (settings.baudRate || 9600)) {
+            option.setAttribute("selected", "selected");
+        }
+    }
+}
+
+// 下拉框里当前选中的端口优先：用户可能刚选好还没点保存
+function selectedSerialFilter() {
+    let element = document.querySelector("#choice2");
+    if (!element || element.selectedOptions.length === 0) {
+        return null;
+    }
+    return SettingsStore.parseUsbFilter(element.selectedOptions[0].value);
+}
+
+async function applyBaudRate() {
+    let target = parseInt(document.querySelector("#choice6").value);
+    let settings = SettingsStore.readOrEmpty();
+    let ports = await navigator.serial.getPorts();
+    if (ports.length === 0) {
+        alert("这个网址下还没有授权任何串口。请先点「授权控制器」。");
+        return;
+    }
+
+    let filter = selectedSerialFilter() || SettingsStore.savedUsbFilter(settings);
+    let port = SettingsStore.matchPort(ports, filter);
+    if (!port) {
+        if (ports.length === 1) {
+            port = ports[0];
+        } else {
+            alert("有多个已授权的串口，请先在上面的下拉框里选中 CH9329 那个再写入。");
+            return;
+        }
+    }
+    console.log("写入波特率使用的串口：", port.getInfo());
+
+    let connection = await Ch9329.connect(port, Ch9329.BAUD_RATES, true);
+    if (!connection.info) {
+        await connection.ch.dispose();
+        try {
+            await port.close();
+        } catch (e) {
+        }
+        let detail = Ch9329.describeAttempts(connection.attempts);
+        console.warn("CH9329 波特率探测失败：", connection.attempts);
+        alert("CH9329 没有应答，无法写入波特率。\n\n探测结果：" + detail
+            + "\n\n如果显示「打不开串口」，多半是 KVM 页面还占着这个端口，先关掉其它标签页再试。");
+        return;
+    }
+    let result = await connection.ch.setBaudRate(target);
+    await connection.ch.dispose();
+    try {
+        await port.close();
+    } catch (e) {
+    }
+    if (!result.ok) {
+        alert("写入失败：" + result.reason);
+        return;
+    }
+
+    SettingsStore.patch({baudRate: target});
+    if (result.unchanged) {
+        alert("芯片波特率已经是 " + target + "，无需改动。");
+        return;
+    }
+    alert("已写入 " + target + "。请把 CH9329 断电重插（拔掉 USB 再插回）后生效。");
+}
+
+function save() {
+    let choice1 = document.querySelector("#choice1");
+    let video = {}
+    if (choice1.selectedOptions.length > 0) {
+        let videoSelector = choice1.selectedOptions[0];
+        let videoLabel = videoSelector.innerText;
+        let videoDeviceId = videoSelector.value;
+        video.label = videoLabel;
+        video.deviceId = videoDeviceId;
+    }
+
+    let choice3 = document.querySelector("#choice3");
+    let audio = {};
+    if (choice3.selectedOptions.length > 0) {
+        let option = choice3.selectedOptions[0];
+        let audioLabel = option.innerText;
+        let audioDeviceId = option.value;
+        audio.label = audioLabel;
+        audio.deviceId = audioDeviceId;
+    }
+
+    let usb = {}
+    let usbElement = document.querySelector("#choice2");
+    if (usbElement.selectedOptions.length > 0) {
+        let option = usbElement.selectedOptions[0];
+        let usbLabel = option.innerText;
+        let usbDeviceId = option.value;
+        usb.label = usbLabel;
+        usb.deviceId = usbDeviceId;
+    }
+    let resolution = {width: 1920, height: 1080};
+    let resolutionElement = document.querySelector("#choice4");
+    if (resolutionElement.selectedOptions.length > 0) {
+        let option = resolutionElement.selectedOptions[0];
+        let split = option.value.split("x");
+        resolution.width = parseInt(split[0]);
+        resolution.height = parseInt(split[1]);
+    }
+
+    let config = {
+        video: video,
+        audio: audio,
+        usb: usb,
+        resolution: resolution,
+        mouseClickMode: "absolute",
+        mouseModeVersion: 1,
+        baudRate: parseInt(document.querySelector("#choice6").value) || 9600
+    };
+    let mouseClickMode = document.querySelector("#choice5");
+    if (mouseClickMode.value === "absolute" || mouseClickMode.value === "relative") {
+        config.mouseClickMode = mouseClickMode.value;
+    }
+
+    if (!SettingsStore.write(config)) {
+        alert("保存失败，浏览器可能禁用了本地存储");
+        return;
+    }
+    alert("保存成功")
+    window.location.reload();
+}
+
+function renderUsed() {
+    let settings = SettingsStore.read();
+    if (!settings) {
+        return;
+    }
+    // 下拉框列的是「能选什么」，这里列的是「实际存了什么」，两者不一定一致
+    let shown = 0;
+    shown += showSavedLine("#usedVideo", "视频", settings.video);
+    shown += showSavedLine("#usedAudio", "音频", settings.audio);
+    shown += showSavedLine("#usedUsb", "控制器", settings.usb);
+    if (shown > 0) {
+        document.querySelector("#savedSection").style.display = "block";
+    }
+}
+
+function showSavedLine(selector, name, device) {
+    if (!device || !device.label) {
+        return 0;
+    }
+    let element = document.querySelector(selector);
+    element.innerHTML = name + "：<span></span>";
+    element.querySelector("span").innerText = device.label;
+    element.style.display = "block";
+    return 1;
+}
+
+renderMedia();
+renderUsb();
+renderUsed();
+
+(function clearServiceWorkerAndCaches() {
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations()
+            .then(function (registrations) {
+                return Promise.all(registrations.map(function (registration) {
+                    return registration.unregister();
+                }));
+            })
+            .catch(function () {});
+    }
+    if (typeof caches !== 'undefined' && caches.keys) {
+        caches.keys()
+            .then(function (keys) {
+                return Promise.all(keys.map(function (key) {
+                    return caches.delete(key);
+                }));
+            })
+            .catch(function () {});
+    }
+})();
