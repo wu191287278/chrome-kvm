@@ -410,6 +410,55 @@ function Ch9329(writer, mouseAbsolute, reader) {
         return {ok: true};
     }
 
+    // 0x80-0x83 表示模式由硬件引脚决定，低 7 位才是模式号本身
+    this.readParaWorkingMode = function (cfg) {
+        return cfg[0] & 0x7f;
+    }
+
+    // 工作模式：0=键盘+鼠标+自定义HID（出厂默认），1=键盘，2=键盘+鼠标，3=自定义HID。
+    // macOS/Linux/Android 下厂商建议用 2。模式 0 是三功能复合设备，macOS 绑不上
+    // 里面的相对鼠标，症状是相对模式完全没反应、绝对模式又拖不动。
+    this.setWorkingMode = async function (mode) {
+        // 不能只比大小：null >= 0 是 true，会被 Uint8Array 悄悄当成模式 0 写进芯片
+        if (!Number.isInteger(mode) || mode < 0x00 || mode > 0x03) {
+            return {ok: false, reason: "工作模式只能是 0-3"};
+        }
+        let cfg = await this.getParaCfg();
+        if (!cfg) {
+            return {ok: false, reason: "读取芯片参数配置失败"};
+        }
+        if (this.readParaWorkingMode(cfg) === mode) {
+            return {ok: true, unchanged: true};
+        }
+        let next = new Uint8Array(cfg);
+        next[0] = mode;
+        // 串口模式同样可能带 0x80，而设置命令只接受 0x00-0x02
+        next[1] = cfg[1] & 0x7f;
+        if (next[1] > 0x02) {
+            return {ok: false, reason: "芯片当前串口模式超出可设置范围，已放弃写入"};
+        }
+        let result = await this.setParaCfg(next);
+        if (!result.ok) {
+            let status = result.status == null ? "无应答" : "0x" + result.status.toString(16);
+            return {ok: false, reason: "写入参数配置失败（" + status + "）"};
+        }
+        return {ok: true};
+    }
+
+    // CMD_SET_DEFAULT_CFG：参数配置和字符串描述符全部恢复出厂默认。
+    // 波特率会回到 9600、工作模式回到 0，和其它配置一样要下次上电才生效。
+    // 这是配置写坏时的退路，所以即使芯片状态已经很糟也要能发出去。
+    this.restoreDefaultCfg = async function () {
+        let frame = await this._enqueue({
+            packet: this.toUnit8Array([0x57, 0xAB, this.ADDR, 0x0C, 0x00]),
+            retries: 1
+        });
+        if (!frame || frame.cmd !== 0x8C) {
+            return {ok: false, status: frame ? frame.data[0] : null};
+        }
+        return {ok: frame.data[0] === 0x00, status: frame.data[0]};
+    }
+
     // false 表示芯片持续无应答、已降级为只发不等
     this.isAckEnabled = function () {
         return !!reader && this._ackSupported;

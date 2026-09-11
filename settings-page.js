@@ -110,13 +110,15 @@ async function releasePort(port) {
     }
 }
 
-async function applyBaudRate() {
-    let target = parseInt(document.querySelector("#choice6").value);
+// 几个写芯片配置的动作外壳完全一样：挑对端口 → 连上 → 确认芯片真在应答 →
+// 用完把端口还回去。只有中间那一步不同，所以把外壳抽出来。
+// 中止时返回 null（提示已经弹过了），成功则返回 action 的结果。
+async function withChip(action) {
     let settings = SettingsStore.readOrEmpty();
     let ports = await navigator.serial.getPorts();
     if (ports.length === 0) {
         alert("这个网址下还没有授权任何串口。请先点「授权控制器」。");
-        return;
+        return null;
     }
 
     let filter = selectedSerialFilter() || SettingsStore.savedUsbFilter(settings);
@@ -126,24 +128,38 @@ async function applyBaudRate() {
             port = ports[0];
         } else {
             alert("有多个已授权的串口，请先在上面的下拉框里选中 CH9329 那个再写入。");
-            return;
+            return null;
         }
     }
-    console.log("写入波特率使用的串口：", port.getInfo());
+    console.log("写入芯片配置使用的串口：", port.getInfo());
 
     let connection = await Ch9329.connect(port, Ch9329.BAUD_RATES, true);
     if (!connection.info) {
         await connection.ch.dispose();
         await releasePort(port);
         let detail = Ch9329.describeAttempts(connection.attempts);
-        console.warn("CH9329 波特率探测失败：", connection.attempts);
-        alert("CH9329 没有应答，无法写入波特率。\n\n探测结果：" + detail
+        console.warn("CH9329 探测失败：", connection.attempts);
+        alert("CH9329 没有应答，无法写入。\n\n探测结果：" + detail
             + "\n\n如果显示「打不开串口」，多半是 KVM 页面还占着这个端口，先关掉其它标签页再试。");
+        return null;
+    }
+    try {
+        return await action(connection.ch);
+    } finally {
+        // 写入成功与否都要归还端口，否则这个标签页会一直占着它
+        await connection.ch.dispose();
+        await releasePort(port);
+    }
+}
+
+async function applyBaudRate() {
+    let target = parseInt(document.querySelector("#choice6").value);
+    let result = await withChip(function (ch) {
+        return ch.setBaudRate(target);
+    });
+    if (!result) {
         return;
     }
-    let result = await connection.ch.setBaudRate(target);
-    await connection.ch.dispose();
-    await releasePort(port);
     if (!result.ok) {
         alert("写入失败：" + result.reason);
         return;
@@ -155,6 +171,46 @@ async function applyBaudRate() {
         return;
     }
     alert("已写入 " + target + "。请把 CH9329 断电重插（拔掉 USB 再插回）后生效。");
+}
+
+async function applyWorkingMode() {
+    let target = parseInt(document.querySelector("#choice7").value);
+    let result = await withChip(function (ch) {
+        return ch.setWorkingMode(target);
+    });
+    if (!result) {
+        return;
+    }
+    if (!result.ok) {
+        alert("写入失败：" + result.reason);
+        return;
+    }
+    if (result.unchanged) {
+        alert("芯片工作模式已经是 " + target + "，无需改动。");
+        return;
+    }
+    alert("已写入工作模式 " + target + "。请把 CH9329 断电重插（拔掉 USB 再插回）后生效。\n\n"
+        + "被控端可能会把它当成一台新键盘而弹出识别向导，走完或关掉即可。");
+}
+
+async function restoreDefaults() {
+    if (!confirm("这会把芯片的参数配置和字符串描述符全部恢复出厂默认：\n"
+            + "波特率回到 9600，工作模式回到 0。\n\n确定继续吗？")) {
+        return;
+    }
+    let result = await withChip(function (ch) {
+        return ch.restoreDefaultCfg();
+    });
+    if (!result) {
+        return;
+    }
+    if (!result.ok) {
+        let status = result.status == null ? "无应答" : "0x" + result.status.toString(16);
+        alert("恢复出厂配置失败（" + status + "）");
+        return;
+    }
+    SettingsStore.patch({baudRate: 9600});
+    alert("已恢复出厂配置。请把 CH9329 断电重插（拔掉 USB 再插回）后生效，之后波特率是 9600。");
 }
 
 function save() {

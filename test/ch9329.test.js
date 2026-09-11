@@ -649,6 +649,101 @@ test("参数配置与波特率", async function (t) {
     });
 });
 
+test("工作模式", async function (t) {
+    // 模式 0 是键盘+鼠标+自定义HID 的三功能复合设备，macOS 绑不上里面的相对
+    // 鼠标；厂商对 macOS/Linux/Android 建议模式 2（键盘+鼠标）。
+    await t.test("切到模式 2 只改工作模式字段", async function () {
+        const {chip, ch} = newChip({baudRate: 9600});
+        const before = chip.state.paraCfg.slice();
+        const result = await ch.setWorkingMode(2);
+        assert.deepStrictEqual(result, {ok: true});
+        assert.strictEqual(chip.state.paraCfg[0], 0x02);
+        assert.deepStrictEqual(chip.state.paraCfg.slice(2), before.slice(2),
+            "波特率等其余字段必须原样保留");
+    });
+
+    await t.test("写回时抹掉串口模式的硬件引脚位，避免芯片判错", async function () {
+        const {chip, ch} = newChip({baudRate: 9600});
+        assert.strictEqual(chip.state.paraCfg[1], 0x80, "读到的是引脚设置的协议模式");
+        await ch.setWorkingMode(2);
+        assert.strictEqual(chip.state.paraCfg[1], 0x00);
+        assert.deepStrictEqual(chip.state.rejected, [], "不应被芯片判为参数错误");
+    });
+
+    await t.test("读工作模式时要去掉硬件引脚位", async function () {
+        const {chip, ch} = newChip({baudRate: 9600});
+        assert.strictEqual(ch.readParaWorkingMode(chip.state.paraCfg), 0,
+            "0x80 是引脚设置的模式 0，模式号仍然是 0");
+    });
+
+    await t.test("已经是目标模式时不重复写入", async function () {
+        // 0x80 是引脚设置的模式 0，模式号就是 0，不该再写一遍
+        const {chip, ch} = newChip({baudRate: 9600});
+        const result = await ch.setWorkingMode(0);
+        assert.deepStrictEqual(result, {ok: true, unchanged: true});
+        assert.strictEqual(chip.state.received.filter(function (f) { return f.cmd === 0x09; }).length, 0);
+    });
+
+    await t.test("超出 0-3 的模式直接拒绝，不去碰芯片", async function () {
+        const {chip, ch} = newChip({baudRate: 9600});
+        for (const bad of [-1, 4, 0x80, null, undefined]) {
+            const result = await ch.setWorkingMode(bad);
+            assert.strictEqual(result.ok, false, "模式 " + bad + " 应被拒绝");
+            assert.match(result.reason, /只能是 0-3/);
+        }
+        assert.strictEqual(chip.state.received.length, 0, "一个包都不该发出去");
+    });
+
+    await t.test("芯片无应答时如实报错", async function () {
+        const {ch} = newChip({silent: true});
+        const warn = console.warn;
+        console.warn = function () {
+        };
+        try {
+            const result = await ch.setWorkingMode(2);
+            assert.strictEqual(result.ok, false);
+            assert.match(result.reason, /读取芯片参数配置失败/);
+        } finally {
+            console.warn = warn;
+        }
+    });
+});
+
+test("恢复出厂配置", async function (t) {
+    // 配置写坏时的退路，所以它必须是不依赖当前配置的独立命令
+    await t.test("发出 CMD_SET_DEFAULT_CFG 且不带参数", async function () {
+        const {chip, ch} = newChip({baudRate: 115200});
+        const result = await ch.restoreDefaultCfg();
+        assert.deepStrictEqual(result, {ok: true, status: 0x00});
+        const sent = chip.state.received.filter(function (f) { return f.cmd === 0x0C; });
+        assert.strictEqual(sent.length, 1);
+        assert.strictEqual(sent[0].data.length, 0, "该命令不带任何参数");
+    });
+
+    await t.test("执行后芯片配置回到出厂值", async function () {
+        const {chip, ch} = newChip({baudRate: 115200});
+        await ch.setWorkingMode(2);
+        assert.strictEqual(chip.state.paraCfg[0], 0x02);
+        await ch.restoreDefaultCfg();
+        assert.strictEqual(chip.state.paraCfg[0], 0x80, "工作模式回到出厂默认");
+        assert.strictEqual(ch.readParaBaudRate(chip.state.paraCfg), 9600, "波特率回到 9600");
+    });
+
+    await t.test("芯片无应答时返回失败而不是假装成功", async function () {
+        const {ch} = newChip({silent: true});
+        const warn = console.warn;
+        console.warn = function () {
+        };
+        try {
+            const result = await ch.restoreDefaultCfg();
+            assert.strictEqual(result.ok, false);
+            assert.strictEqual(result.status, null);
+        } finally {
+            console.warn = warn;
+        }
+    });
+});
+
 test("连接时探测波特率", async function (t) {
     await t.test("设置里的首选值不对时自动找到芯片实际波特率", async function () {
         const fake = createFakePort({chipBaudRate: 115200});

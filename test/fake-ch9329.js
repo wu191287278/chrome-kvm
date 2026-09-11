@@ -42,6 +42,7 @@ function createFakeChip(options) {
         received: [],                     // 收到的命令帧 {cmd, data}
         rejected: [],                     // 被芯片判错的帧
         paraCfg: defaultParaCfg(options.baudRate || 9600),
+        restoredDefaults: 0,              // 收到过几次恢复出厂命令
         info: Object.assign({
             version: 0x30,
             usbConnected: 1,
@@ -126,6 +127,13 @@ function createFakeChip(options) {
             }
             state.paraCfg = data.slice();
             deliver(buildFrame(0x89, [0x00]));
+            return;
+        }
+        if (cmd === 0x0C) {
+            // 恢复出厂：真芯片会把参数和字符串描述符一起还原，这里只还原参数块
+            state.paraCfg = defaultParaCfg(9600);
+            state.restoredDefaults++;
+            deliver(buildFrame(0x8C, [0x00]));
             return;
         }
         deliver(buildFrame(cmd | 0x80, [0x00]));
