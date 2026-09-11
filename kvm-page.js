@@ -126,6 +126,9 @@ function openMedia(videoDeviceId, audio, width, height) {
 let currentBaudRate = null;
 // 探测失败时上面那个值只是兜底选的，界面要如实标出来
 let currentBaudProbed = true;
+// 浏览器可能直接拒绝指针锁定（最常见的是页面没有焦点）。不记下来的话界面
+// 看起来只是「还没锁」，用户会一直点画面却等不到任何反应。
+let pointerLockRejected = false;
 let activePort = null;
 let lastSerialArgs = null;
 let serialLost = false;
@@ -182,7 +185,8 @@ function renderStatus(info) {
         baudRate: currentBaudRate,
         baudProbed: currentBaudProbed,
         mouseRelative: !!ch && !ch.isMouseAbsolute(),
-        pointerLocked: document.pointerLockElement === videoElement
+        pointerLocked: document.pointerLockElement === videoElement,
+        pointerLockRejected: pointerLockRejected
     });
     setStatus(status.level, status.lines);
 }
@@ -357,19 +361,41 @@ function open() {
         if (!pending || !pending.catch) {
             return;  // 老浏览器不返回 Promise，当作已经发起
         }
-        pending.catch(function () {
+        pending.catch(function (first) {
             // 有的平台不支持免加速，退回普通锁定也比不锁强
+            let retry;
             try {
-                videoElement.requestPointerLock();
+                retry = videoElement.requestPointerLock();
             } catch (e) {
+                pointerLockRejected = true;
                 console.warn("指针锁定失败，相对模式下光标到屏幕边缘会走不动", e);
+                renderStatus(lastInfo);
+                return;
+            }
+            if (retry && retry.catch) {
+                retry.catch(function (e) {
+                    pointerLockRejected = true;
+                    console.warn("指针锁定失败，相对模式下光标到屏幕边缘会走不动",
+                        e || first);
+                    renderStatus(lastInfo);
+                });
             }
         });
     }
 
+    // 锁定失败会走这里而不是抛异常，requestPointerLock 的 Promise 也可能
+    // 早于它 reject，两条路都要收口
+    document.addEventListener('pointerlockerror', function () {
+        pointerLockRejected = true;
+        renderStatus(lastInfo);
+    });
+
     document.addEventListener('pointerlockchange', function () {
-        if (ch) {
-            // 解锁多半是按了 Esc，这时鼠标键的抬起事件收不到，先清干净
+        if (pointerLocked()) {
+            pointerLockRejected = false;
+        } else if (ch) {
+            // 解锁多半是按了 Esc，这时鼠标键的抬起事件收不到，先清干净。
+            // 只在解锁时做：上锁时清会把用户刚按下的那个键也松掉，拖拽就断了
             ch.forceReleaseAllMouse();
             // 光标重新出现的位置和锁定前不连续，下次移动要重新取差分基准
             ch.resetRelativeOrigin();

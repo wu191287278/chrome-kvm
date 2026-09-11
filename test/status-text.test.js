@@ -215,6 +215,30 @@ test("指针锁定文案", async (t) => {
         assert.ok(lines.some((l) => l.indexOf("已锁定") !== -1 && l.indexOf("Esc") !== -1), lines.join(" / "));
     });
 
+    await t.test("被浏览器拒绝时要说出来，不能还让用户去点画面", () => {
+        const status = StatusText.describeSerial(
+            Object.assign({}, base, {mouseRelative: true, pointerLocked: false,
+                pointerLockRejected: true}));
+        assert.ok(status.lines.some((l) => l.indexOf("被拒绝") !== -1), status.lines.join(" / "));
+        assert.ok(!status.lines.some((l) => l.indexOf("点击画面锁定") !== -1),
+            "别同时给出互相矛盾的指引：" + status.lines.join(" / "));
+        assert.strictEqual(status.level, "warn", "锁不上是要提醒的状态");
+    });
+
+    await t.test("拒绝状态不该把已有的错误降级成警告", () => {
+        const status = StatusText.describeSerial({
+            connected: true, info: null, mouseRelative: true, pointerLockRejected: true
+        });
+        assert.strictEqual(status.level, "error", "芯片无应答比锁不上严重");
+    });
+
+    await t.test("锁上之后就不该再提被拒绝过", () => {
+        const lines = StatusText.describeSerial(
+            Object.assign({}, base, {mouseRelative: true, pointerLocked: true,
+                pointerLockRejected: true})).lines;
+        assert.ok(!lines.some((l) => l.indexOf("被拒绝") !== -1), lines.join(" / "));
+    });
+
     await t.test("绝对模式不提指针锁定：那是相对模式才需要的", () => {
         const lines = StatusText.describeSerial(
             Object.assign({}, base, {mouseRelative: false})).lines;

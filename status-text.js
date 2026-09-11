@@ -88,7 +88,16 @@ var StatusText = (function () {
         }
         // 相对模式没锁指针时，光标顶到屏幕边缘就走不动了，得让用户知道怎么解决
         if (state.mouseRelative) {
-            lines.push(state.pointerLocked ? "指针已锁定（Esc 释放）" : "相对模式：点击画面锁定指针");
+            if (state.pointerLocked) {
+                lines.push("指针已锁定（Esc 释放）");
+            } else if (state.pointerLockRejected) {
+                // 被拒时不能还显示「点击画面锁定指针」，那等于让用户白点
+                lines.push("指针锁定被拒绝");
+                lines.push("先点一下页面取得焦点再试");
+                level = level === "ok" ? "warn" : level;
+            } else {
+                lines.push("相对模式：点击画面锁定指针");
+            }
         }
 
         lines.push("点击刷新");
