@@ -1129,6 +1129,9 @@ if (typeof module !== "undefined" && module.exports) {
 // 依次用候选波特率打开串口，取第一个能应答 GET_INFO 的；
 // 全部不应答时退回首选波特率，保持「只发不等」的可用状态
 Ch9329.connect = async function (port, baudRates, mouseAbsolute) {
+    // 每个候选波特率的结果都记下来，失败时才能说清是打不开还是打开了没人应答
+    let attempts = [];
+
     async function closePort() {
         if (port.readable || port.writable) {
             try {
@@ -1143,13 +1146,16 @@ Ch9329.connect = async function (port, baudRates, mouseAbsolute) {
         try {
             await port.open({baudRate: baudRates[i]});
         } catch (e) {
+            attempts.push({baudRate: baudRates[i], outcome: "open-failed", error: e});
             continue;
         }
         let ch = new Ch9329(port.writable.getWriter(), mouseAbsolute, port.readable.getReader());
         let info = await ch.getInfo();
         if (info) {
-            return {ch: ch, info: info, baudRate: baudRates[i], probed: true};
+            attempts.push({baudRate: baudRates[i], outcome: "ok"});
+            return {ch: ch, info: info, baudRate: baudRates[i], probed: true, attempts: attempts};
         }
+        attempts.push({baudRate: baudRates[i], outcome: "no-reply"});
         await ch.dispose();
     }
 
@@ -1159,6 +1165,24 @@ Ch9329.connect = async function (port, baudRates, mouseAbsolute) {
         ch: new Ch9329(port.writable.getWriter(), mouseAbsolute, port.readable.getReader()),
         info: null,
         baudRate: baudRates[0],
-        probed: false
+        probed: false,
+        attempts: attempts
     };
+}
+
+// 把探测结果翻成一句人话，给界面提示用
+Ch9329.describeAttempts = function (attempts) {
+    if (!attempts || !attempts.length) {
+        return "没有可尝试的波特率";
+    }
+    return attempts.map(function (a) {
+        if (a.outcome === "open-failed") {
+            let message = a.error && a.error.message ? a.error.message : String(a.error);
+            return a.baudRate + " 打不开串口（" + message + "）";
+        }
+        if (a.outcome === "no-reply") {
+            return a.baudRate + " 打开成功但芯片无应答";
+        }
+        return a.baudRate + " 正常";
+    }).join("；");
 }

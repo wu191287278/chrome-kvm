@@ -296,29 +296,64 @@
         }
     }
 
+    // 下拉框里当前选中的端口优先：用户可能刚选好还没点保存
+    function selectedSerialFilter() {
+        let element = document.querySelector("#choice2");
+        if (!element || element.selectedOptions.length === 0) {
+            return null;
+        }
+        try {
+            return JSON.parse(element.selectedOptions[0].value);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function matchPort(ports, filter) {
+        if (!filter) {
+            return null;
+        }
+        for (let i = 0; i < ports.length; i++) {
+            let info = ports[i].getInfo();
+            if (info.usbVendorId === filter.usbVendorId && info.usbProductId === filter.usbProductId) {
+                return ports[i];
+            }
+        }
+        return null;
+    }
+
     async function applyBaudRate() {
         let target = parseInt(document.querySelector("#choice6").value);
         let settings = JSON.parse(window.localStorage.getItem("settings") || "{}");
         let ports = await navigator.serial.getPorts();
-        let filter = savedSerialFilter(settings);
-        let port = null;
-        for (let i = 0; i < ports.length; i++) {
-            let info = ports[i].getInfo();
-            if (!filter || (info.usbVendorId === filter.usbVendorId && info.usbProductId === filter.usbProductId)) {
-                port = ports[i];
-                break;
-            }
-        }
-        if (!port) {
-            alert("未找到已授权的 CH9329 串口，请先授权并保存。");
+        if (ports.length === 0) {
+            alert("这个网址下还没有授权任何串口。请先点「点我授权键鼠控制器」。");
             return;
         }
+
+        let filter = selectedSerialFilter() || savedSerialFilter(settings);
+        let port = matchPort(ports, filter);
+        if (!port) {
+            if (ports.length === 1) {
+                port = ports[0];
+            } else {
+                alert("有多个已授权的串口，请先在上面的下拉框里选中 CH9329 那个再写入。");
+                return;
+            }
+        }
+        console.log("写入波特率使用的串口：", port.getInfo());
 
         let connection = await Ch9329.connect(port, Ch9329.BAUD_RATES, true);
         if (!connection.info) {
             await connection.ch.dispose();
-            await port.close();
-            alert("CH9329 没有应答，无法写入波特率。请检查串口接线后重试。");
+            try {
+                await port.close();
+            } catch (e) {
+            }
+            let detail = Ch9329.describeAttempts(connection.attempts);
+            console.warn("CH9329 波特率探测失败：", connection.attempts);
+            alert("CH9329 没有应答，无法写入波特率。\n\n探测结果：" + detail
+                + "\n\n如果显示「打不开串口」，多半是 KVM 页面还占着这个端口，先关掉其它标签页再试。");
             return;
         }
         let result = await connection.ch.setBaudRate(target);
