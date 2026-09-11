@@ -195,6 +195,79 @@ test("每条命令都等芯片应答", async function (t) {
     });
 });
 
+test("拖拽死区", async function (t) {
+    // 死区按客户端像素算，和被控端分辨率无关。绝对模式的鼠标包是 CMD 0x04
+    const zone = Ch9329.DRAG_DEAD_ZONE_PX;
+
+    await t.test("按住后小幅抖动不发移动包，避免点击被当成拖拽", async function () {
+        const {chip, ch} = newChip();
+        const video = fakeVideo(1920, 1080);
+        ch.mouseButtonDown(video, 500, 500, 0x01);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        const before = framesOf(chip, 0x04).length;
+        assert.ok(before > 0, "按下本身应该已经发过包，否则后面的对比没有意义");
+
+        // 斜着挪一点点，距离仍在死区内
+        ch.mouseMove(video, 500 + zone - 2, 500);
+        ch.mouseMove(video, 500, 500 + zone - 2);
+        await new Promise(function (r) { setTimeout(r, 50); });
+
+        assert.strictEqual(framesOf(chip, 0x04).length, before, "死区内不该发出移动包");
+    });
+
+    await t.test("超过死区就进入拖拽", async function () {
+        const {chip, ch} = newChip();
+        const video = fakeVideo(1920, 1080);
+        ch.mouseButtonDown(video, 500, 500, 0x01);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        const before = framesOf(chip, 0x04).length;
+
+        ch.mouseMove(video, 500 + zone + 2, 500);
+        await new Promise(function (r) { setTimeout(r, 50); });
+
+        assert.ok(framesOf(chip, 0x04).length > before, "越过死区后应该开始发移动包");
+    });
+
+    await t.test("死区是圆的：横竖两个方向阈值一样", function () {
+        const video = fakeVideo(1920, 1080);
+        // 1920x1080 不是正方形，早先在 0..4095 空间里比较时，
+        // 同样的像素位移在横竖方向会得出不同结论
+        const horizontal = newChip();
+        horizontal.ch.mouseButtonDown(video, 500, 500, 0x01);
+        horizontal.ch.mouseMove(video, 500 + zone + 2, 500);
+        const vertical = newChip();
+        vertical.ch.mouseButtonDown(video, 500, 500, 0x01);
+        vertical.ch.mouseMove(video, 500, 500 + zone + 2);
+
+        assert.strictEqual(horizontal.ch._clickArmed, false, "横向越过死区应解除锁定");
+        assert.strictEqual(vertical.ch._clickArmed, false, "纵向同样距离也应解除锁定");
+    });
+
+    await t.test("死区可以调，调小之后更灵敏", function () {
+        const original = Ch9329.DRAG_DEAD_ZONE_PX;
+        try {
+            Ch9329.DRAG_DEAD_ZONE_PX = 2;
+            const {ch} = newChip();
+            const video = fakeVideo(1920, 1080);
+            ch.mouseButtonDown(video, 500, 500, 0x01);
+            // 这个位移在默认死区内，调小之后应该算拖拽了
+            ch.mouseMove(video, 504, 500);
+            assert.strictEqual(ch._clickArmed, false, "改小死区后同样的位移应触发拖拽");
+        } finally {
+            Ch9329.DRAG_DEAD_ZONE_PX = original;
+        }
+    });
+
+    await t.test("没按键时移动不受死区影响", async function () {
+        const {chip, ch} = newChip();
+        const video = fakeVideo(1920, 1080);
+        ch.mouseMove(video, 500, 500);
+        ch.mouseMove(video, 501, 500);
+        await new Promise(function (r) { setTimeout(r, 50); });
+        assert.ok(framesOf(chip, 0x04).length > 0, "普通移动一像素也要跟手");
+    });
+});
+
 test("移动包合并，按键包不被淹没", async function () {
     const {chip, ch} = newChip({replyDelayMs: 5});
     const video = fakeVideo(1920, 1080);

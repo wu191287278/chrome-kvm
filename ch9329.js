@@ -661,12 +661,14 @@ function Ch9329(writer, mouseAbsolute, reader) {
             return;
         }
 
-        // 按住时先锁在按下点；只有位移超过死区才进入拖拽，避免微抖被当成拖拽
-        // 0..4095 坐标系下约 40 ≈ 1080p 上十几个像素，略大于系统右键拖拽阈值
+        // 按住时先锁在按下点，位移超过死区才算拖拽，避免手抖把点击变成拖拽。
+        // 死区按客户端像素算：抖动来自手，和被控端分辨率无关。
+        // （早先是在 0..4095 坐标系里比，16:9 下横向阈值是纵向的近两倍，是个椭圆）
         if (this.clicked.command !== 0x00 && this._clickArmed) {
-            let dx = point.x - this._downAbsX;
-            let dy = point.y - this._downAbsY;
-            if ((dx * dx + dy * dy) < (40 * 40)) {
+            let dx = clientX - this._downClientX;
+            let dy = clientY - this._downClientY;
+            let limit = Ch9329.DRAG_DEAD_ZONE_PX;
+            if ((dx * dx + dy * dy) < (limit * limit)) {
                 return;
             }
             this._clickArmed = false;
@@ -689,6 +691,8 @@ function Ch9329(writer, mouseAbsolute, reader) {
         this.lastAbsY = point.y;
         this._downAbsX = point.x;
         this._downAbsY = point.y;
+        this._downClientX = clientX;
+        this._downClientY = clientY;
         // 先强制松所有键，清掉被控端可能卡住的鼠标键/修饰键残留；
         // 它会清空 _clickArmed，所以死区标记必须在它之后再置位
         this.forceReleaseAllMouse();
@@ -743,6 +747,11 @@ function Ch9329(writer, mouseAbsolute, reader) {
         return this.sendRelativePacket(this.clicked.command, 0, 0, wheel);
     }
 }
+
+// 按住鼠标后要移动超过这么多客户端像素才算拖拽，小于它的位移当作原地点击。
+// Windows 自己的拖拽阈值是 4px，这里略放宽一点，因为画面通常是缩放显示的。
+// 手感不对可以在控制台直接改，例如 Ch9329.DRAG_DEAD_ZONE_PX = 4
+Ch9329.DRAG_DEAD_ZONE_PX = 6;
 
 Ch9329.BAUD_RATES = [9600, 115200];
 
