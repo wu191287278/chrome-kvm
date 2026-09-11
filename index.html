@@ -319,6 +319,9 @@
     }
 
     let currentBaudRate = null;
+    let activePort = null;
+    let lastSerialArgs = null;
+    let serialLost = false;
 
     function setStatus(level, lines) {
         let button = document.querySelector("#statusButton");
@@ -333,6 +336,10 @@
     function renderStatus(info) {
         if (!ch) {
             setStatus("idle", ["未连接串口"]);
+            return;
+        }
+        if (serialLost) {
+            setStatus("error", ["串口已断开", "插回 CH9329 后会自动重连", "或点此立即重试"]);
             return;
         }
         let level = "ok";
@@ -368,7 +375,50 @@
             renderStatus(null);
             return;
         }
+        if (serialLost) {
+            reconnectSerial();
+            return;
+        }
         renderStatus(await ch.getInfo());
+    }
+
+    function handleSerialLost() {
+        if (serialLost) {
+            return;
+        }
+        serialLost = true;
+        if (ch) {
+            ch.markDisconnected();
+        }
+        console.warn("CH9329 串口已断开");
+        renderStatus(null);
+    }
+
+    function reconnectSerial() {
+        if (!lastSerialArgs) {
+            return;
+        }
+        setStatus("warn", ["正在重连…"]);
+        openSerial(lastSerialArgs.deviceId, lastSerialArgs.mouseClickMode);
+    }
+
+    // 拔掉 CH9329 时串口写入只会静默失败，必须靠 disconnect 事件才能让界面知道
+    function bindSerialLifecycle() {
+        if (!navigator.serial || window.__chromeKvmSerialBound) {
+            return;
+        }
+        window.__chromeKvmSerialBound = true;
+        navigator.serial.addEventListener("disconnect", function (event) {
+            if (activePort && event.target !== activePort) {
+                return;
+            }
+            handleSerialLost();
+        });
+        navigator.serial.addEventListener("connect", function () {
+            if (serialLost) {
+                reconnectSerial();
+            }
+        });
     }
 
     function candidateBaudRates() {
@@ -399,10 +449,17 @@
     }
 
     function openSerial(deviceId, mouseClickMode) {
+        lastSerialArgs = {deviceId: deviceId, mouseClickMode: mouseClickMode};
+        bindSerialLifecycle();
         navigator.serial.getPorts()
             .then(async function (ports) {
                 let port = pickSerialPort(ports, deviceId);
                 if (!port) {
+                    // 重连途中设备还没回来是正常的，别拿弹窗打断用户
+                    if (serialLost) {
+                        renderStatus(null);
+                        return;
+                    }
                     alert("未检测到所选串口设备。请到设置页重新授权并选择正确的 CH9329 端口。");
                     return;
                 }
@@ -410,6 +467,9 @@
                 // 芯片实际波特率以探测结果为准，设置里的值只作为首选，避免配置不同步就连不上
                 let connection = await Ch9329.connect(port, candidateBaudRates(), mouseAbsolute);
                 ch = connection.ch;
+                ch.onTransportError = handleSerialLost;
+                activePort = port;
+                serialLost = false;
                 currentBaudRate = connection.baudRate;
                 open();
                 let info = connection.info;
@@ -425,6 +485,11 @@
                 }
             })
             .catch(function (e) {
+                if (serialLost) {
+                    console.warn("重连失败", e);
+                    renderStatus(null);
+                    return;
+                }
                 alert(e && e.message ? e.message : String(e));
             });
     }
@@ -438,11 +503,17 @@
         videoElement.style.cursor = "none";
         document.addEventListener('keydown', (event) => {
             event.preventDefault()
+            if (!ch) {
+                return;
+            }
             ch.keydown(event.code);
         })
 
         document.addEventListener('keyup', (event) => {
             event.preventDefault();
+            if (!ch) {
+                return;
+            }
             ch.keyup(event.code);
         });
 

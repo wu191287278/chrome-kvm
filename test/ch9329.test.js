@@ -478,6 +478,56 @@ test("文本输入", async function (t) {
     });
 });
 
+test("串口断开", async function (t) {
+    function brokenWriter() {
+        return {
+            write: async function () {
+                throw new Error("The device has been lost.");
+            }
+        };
+    }
+
+    await t.test("写失败时标记断开并回调一次", async function () {
+        const ch = new Ch9329(brokenWriter(), true, null);
+        let calls = 0;
+        ch.onTransportError = function () {
+            calls++;
+        };
+        assert.strictEqual(ch.isConnected(), true);
+        await ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x08, 0, 0, 0, 0, 0, 0, 0, 0]));
+        assert.strictEqual(ch.isConnected(), false);
+        assert.strictEqual(calls, 1);
+
+        await ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x08, 0, 0, 0, 0, 0, 0, 0, 0]));
+        assert.strictEqual(calls, 1, "断开后不应反复回调");
+    });
+
+    await t.test("断开后命令直接丢弃，不再写串口", async function () {
+        const {chip, ch} = newChip();
+        ch.markDisconnected();
+        await ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x08, 0, 0, 0, 0, 0, 0, 0, 0]));
+        ch.mouseMove(fakeVideo(1920, 1080), 100, 100);
+        await new Promise(function (r) { setTimeout(r, 50); });
+        assert.deepStrictEqual(chip.state.raw, [], "不应再有任何字节发出");
+    });
+
+    await t.test("断开时排队中的命令被结束掉，不会卡住调用方", async function () {
+        const {ch} = newChip({silent: true, replyDelayMs: 0});
+        const warn = console.warn;
+        console.warn = function () {
+        };
+        try {
+            const pending = ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x08, 0, 0, 0, 0, 0, 0, 0, 0]));
+            const queued = ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x08, 0, 0, 0, 0, 0, 0, 0, 0]));
+            ch.markDisconnected();
+            assert.strictEqual(await queued, null, "排队未发的命令应立即以 null 结束");
+            await pending;
+        } finally {
+            console.warn = warn;
+        }
+    });
+});
+
 test("GET_INFO 解析", async function (t) {
     await t.test("版本、USB 枚举、指示灯、休眠位", async function () {
         const {ch} = newChip({info: {version: 0x31, usbConnected: 0x01, led: 0x07, sleep: 0x03}});

@@ -11,6 +11,9 @@ function Ch9329(writer, mouseAbsolute, reader) {
     this._readLoopStarted = false;
     this._ackSupported = true;
     this._ackMisses = 0;
+    this._transportBroken = false;
+    // 串口写失败（通常是设备被拔掉）时回调，由页面决定怎么提示
+    this.onTransportError = null;
     this.keyboardMapping = {
         8: 0x2A,  // Back
         9: 0x2B,  // Tab
@@ -515,9 +518,19 @@ function Ch9329(writer, mouseAbsolute, reader) {
         let cmd = packet[3];
         let attempts = (retries == null ? 1 : retries) + 1;
         for (let attempt = 0; attempt < attempts; attempt++) {
+            if (this._transportBroken) {
+                return null;
+            }
             try {
                 await writer.write(packet);
             } catch (e) {
+                this.markDisconnected();
+                if (this.onTransportError) {
+                    try {
+                        this.onTransportError(e);
+                    } catch (ignored) {
+                    }
+                }
                 return null;
             }
             if (!reader || !this._ackSupported) {
@@ -692,6 +705,22 @@ function Ch9329(writer, mouseAbsolute, reader) {
     // false 表示芯片持续无应答、已降级为只发不等
     this.isAckEnabled = function () {
         return !!reader && this._ackSupported;
+    }
+
+    // false 表示串口已经写不进去了，后续命令直接丢弃而不是逐个抛错
+    this.isConnected = function () {
+        return !this._transportBroken;
+    }
+
+    this.markDisconnected = function () {
+        this._transportBroken = true;
+        let pending = this._queue;
+        this._queue = [];
+        for (let i = 0; i < pending.length; i++) {
+            if (pending[i].resolve) {
+                pending[i].resolve(null);
+            }
+        }
     }
 
     this.dispose = async function () {
