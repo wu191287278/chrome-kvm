@@ -2,145 +2,307 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>Chrome KVM</title>
+    <title>设置 - Chrome KVM</title>
     <meta name="description" content="Chrome KVM">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+        /* 让原生下拉框的弹出列表也跟着用深色 */
+        :root {
+            color-scheme: dark;
         }
 
+        body {
+            margin: 0;
+            /* 用 min-height 而不是 height，内容超出一屏时还能滚 */
+            min-height: 100vh;
+            padding: 32px 16px;
+            box-sizing: border-box;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            font: 14px/1.6 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+            color: #e4e4e7;
+            background-color: #131316;
+        }
+
+        /* 和控制页工具栏同一套：半透明毛玻璃面板 */
         .form-container {
-            background-color: #ffffff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            width: 300px;
-            text-align: center;
+            width: 100%;
+            max-width: 440px;
+            box-sizing: border-box;
+            padding: 24px;
+            background-color: rgba(39, 39, 42, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
         }
 
         h2 {
-            font-size: 24px;
-            margin-bottom: 20px;
-            color: #333;
+            margin: 0 0 4px;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .page-hint {
+            margin: 0;
+            font-size: 13px;
+            color: #a1a1aa;
+        }
+
+        /* 按视频 / 键鼠分组，和工具栏上那两个状态图标对应 */
+        .section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 14px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #d4d4d8;
+        }
+
+        .section-title svg {
+            width: 16px;
+            height: 16px;
+            color: #a1a1aa;
+            flex-shrink: 0;
+        }
+
+        .field {
+            margin-bottom: 14px;
         }
 
         label {
-            font-size: 16px;
-            margin-bottom: 10px;
             display: block;
-            color: #555;
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: #a1a1aa;
+        }
+
+        a {
+            color: #60a5fa;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
         }
 
         select {
             width: 100%;
-            padding: 8px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
+            box-sizing: border-box;
+            padding: 9px 32px 9px 10px;
+            font: inherit;
+            color: #e4e4e7;
+            background-color: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            /* 自带的箭头在深底上很难看，换成和工具栏一致的细线箭头 */
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 14px;
+            transition: border-color 0.15s, background-color 0.15s;
+        }
+
+        select:hover {
+            border-color: rgba(255, 255, 255, 0.22);
+        }
+
+        select:focus-visible {
+            outline: 2px solid #60a5fa;
+            outline-offset: -1px;
         }
 
         .confirm-button {
-            background-color: #007BFF;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            font-size: 14px;
+            font: inherit;
+            padding: 9px 14px;
+            color: #e4e4e7;
+            background-color: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
             cursor: pointer;
-            border-radius: 4px;
-            margin-top: 8px;
+            transition: background-color 0.15s, border-color 0.15s;
         }
 
         .confirm-button:hover {
-            background-color: #0056b3;
+            background-color: rgba(255, 255, 255, 0.15);
         }
 
-        .separator {
-            margin: 20px 0;
-            border-bottom: 1px solid #ddd;
+        .confirm-button:focus-visible {
+            outline: 2px solid #60a5fa;
+            outline-offset: 1px;
+        }
+
+        /* 主操作用工具栏里表示「正常」的那个绿 */
+        .confirm-button.primary {
+            font-weight: 600;
+            color: #0b0b0d;
+            background-color: #3ddc84;
+            border-color: transparent;
+        }
+
+        .confirm-button.primary:hover {
+            background-color: #34c975;
+        }
+
+        .confirm-button.block {
+            display: block;
+            width: 100%;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .actions .confirm-button {
+            flex: 1;
+        }
+
+        .hint {
+            margin: 6px 0 0;
+            font-size: 12px;
+            color: #8b8b93;
+        }
+
+        code {
+            padding: 1px 5px;
+            font-size: 12px;
+            background-color: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+        }
+
+        .saved-line {
+            margin: 0 0 6px;
+            font-size: 12px;
+            color: #a1a1aa;
+            /* 设备名可能很长，别把面板撑破 */
+            overflow-wrap: anywhere;
+        }
+
+        .saved-line:last-child {
+            margin-bottom: 0;
+        }
+
+        .saved-line span {
+            color: #d4d4d8;
         }
     </style>
 </head>
 <body>
 <div class="form-container">
-    <h2>授权设备</h2>
+    <h2>设备设置</h2>
+    <p class="page-hint">选择采集卡和 CH9329 控制器，保存后回到控制页。浏览器的设备授权是按网址记的，换网址要重新授权。</p>
 
-    <div class="separator"></div>
+    <div class="section">
+        <!-- 图标和控制页工具栏上的视频状态用的是同一个 -->
+        <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+                <rect x="2" y="6" width="14" height="12" rx="2"/>
+                <path d="M22 8l-6 4 6 4V8z"/>
+            </svg>
+            视频采集
+        </div>
+        <div class="field">
+            <label for="choice1">视频（<a href="http://e.tb.cn/h.TfXLcXooYTXSM4E?tk=XEqJ3xEBB9g" target="_blank">USB
+                视频采集卡</a>）</label>
+            <select id="choice1" name="choice1"></select>
+        </div>
+        <div class="field">
+            <label for="choice3">音频（<a href="http://e.tb.cn/h.TfXLcXooYTXSM4E?tk=XEqJ3xEBB9g" target="_blank">USB
+                视频采集卡</a>）</label>
+            <select id="choice3" name="choice3"></select>
+        </div>
+        <div class="field">
+            <label for="choice4">屏幕分辨率</label>
+            <select id="choice4" name="choice4">
+                <option value="1920x1080">1920x1080</option>
+                <option value="4096x2160">4096x2160</option>
+                <option value="3840x2160">3840x2160</option>
+                <option value="1680x1050">1680x1050</option>
+                <option value="800x600">800x600</option>
+                <option value="1280x960">1280x960</option>
+                <option value="1280x1024">1280x1024</option>
+                <option value="1360x768">1360x768</option>
+                <option value="1440x1050">1440x1050</option>
+                <option value="1440x900">1440x900</option>
+                <option value="1600x900">1600x900</option>
+                <option value="1600x1200">1600x1200</option>
+            </select>
+            <p class="hint">填被控端系统里实际设置的分辨率</p>
+        </div>
+        <button type="button" class="confirm-button block" onclick="authMedia()">授权视频采集卡</button>
+    </div>
 
-    <!-- 第一个选择框 -->
-    <form action="javascript:void(0)" method="post">
-        <label for="choice1">视频 (<a href="http://e.tb.cn/h.TfXLcXooYTXSM4E?tk=XEqJ3xEBB9g" target="_blank">USB
-            视频采集卡</a>):</label>
-        <select id="choice1" name="choice1">
-        </select>
-        <br>
-        <label for="choice3">音频 (<a href="http://e.tb.cn/h.TfXLcXooYTXSM4E?tk=XEqJ3xEBB9g" target="_blank">USB
-            视频采集卡</a>):</label>
-        <select id="choice3" name="choice3">
-        </select>
-        <label for="choice4">屏幕分辨率 (系统内设置的分辨率):</label>
-        <select id="choice4" name="choice1">
-            <option value="1920x1080">1920x1080</option>
-            <option value="4096x2160">4096x2160</option>
-            <option value="3840x2160">3840x2160</option>
-            <option value="1680x1050">1680x1050</option>
-            <option value="800x600">800x600</option>
-            <option value="1280x960">1280x960</option>
-            <option value="1280x1024">1280x1024</option>
-            <option value="1360x768">1360x768</option>
-            <option value="1440x1050">1440x1050</option>
-            <option value="1440x900">1440x900</option>
-            <option value="1600x900">1600x900</option>
-            <option value="1600x1200">1600x1200</option>
-        </select>
-        <button type="button" class="confirm-button" onclick="authMedia()">点我授权视频采集卡</button>
-        <br>
-        <div class="separator"></div>
-        <label for="choice2">串口 (<a href="http://e.tb.cn/h.TfXoUbjkCYXwmeW?tk=7Rlp3xEAdqD"
-                                      target="_blank">CH9329键鼠控制器</a>) <br>Linux 需要增加权限: <br>chmod 666
-            /dev/ttydUSB0</label>
-        <select id="choice2" name="choice2">
-        </select>
-        <label for="choice5">鼠标按键模式</label>
-        <select id="choice5" name="choice5">
-            <option value="absolute" selected>绝对模式</option>
-            <option value="relative">相对模式</option>
-        </select>
-        <p id="mouseModeHint" style="font-size: 12px; color: #888; margin: 4px 0 0;">
-            桌面用绝对模式；BIOS 等不支持绝对鼠标的场景用相对模式（尚未真机验证）
-        </p>
+    <div class="section">
+        <!-- 图标和工具栏上的键鼠状态一致 -->
+        <div class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+                <rect x="1" y="8" width="14" height="10" rx="2"/>
+                <path d="M4 11.5h.01"/>
+                <path d="M7.5 11.5h.01"/>
+                <path d="M11 11.5h.01"/>
+                <path d="M4.5 14.5h6"/>
+                <rect x="17" y="6" width="6" height="12" rx="3"/>
+                <path d="M20 8.5v2"/>
+            </svg>
+            键鼠控制器
+        </div>
+        <div class="field">
+            <label for="choice2">串口（<a href="http://e.tb.cn/h.TfXoUbjkCYXwmeW?tk=7Rlp3xEAdqD" target="_blank">CH9329
+                键鼠控制器</a>）</label>
+            <select id="choice2" name="choice2"></select>
+            <p class="hint">Linux 下需要先给设备加权限：<code>chmod 666 /dev/ttyUSB0</code></p>
+        </div>
+        <div class="field">
+            <label for="choice5">鼠标按键模式</label>
+            <select id="choice5" name="choice5">
+                <option value="absolute" selected>绝对模式</option>
+                <option value="relative">相对模式</option>
+            </select>
+            <p class="hint" id="mouseModeHint">桌面用绝对模式；BIOS 等不支持绝对鼠标的场景用相对模式（尚未真机验证）</p>
+        </div>
+        <div class="field">
+            <label for="choice6">串口波特率</label>
+            <select id="choice6" name="choice6">
+                <option value="9600">9600（芯片出厂默认）</option>
+                <option value="115200">115200（鼠标更跟手）</option>
+            </select>
+            <p class="hint" id="baudHint">改波特率需要写进芯片，写入后断电重插 CH9329 才生效</p>
+        </div>
+        <div class="actions">
+            <button type="button" class="confirm-button" onclick="authUsb()">授权控制器</button>
+            <button type="button" class="confirm-button" onclick="applyBaudRate()">写入波特率</button>
+        </div>
+    </div>
 
-        <label for="choice6">串口波特率</label>
-        <select id="choice6" name="choice6">
-            <option value="9600">9600（芯片出厂默认）</option>
-            <option value="115200">115200（鼠标更跟手）</option>
-        </select>
-        <button type="button" class="confirm-button" onclick="applyBaudRate()">写入 CH9329 芯片</button>
-        <p id="baudHint" style="font-size: 12px; color: #888; margin: 4px 0 0;">
-            改波特率需要写进芯片，写入后断电重插 CH9329 才生效
-        </p>
+    <div class="section" id="savedSection" style="display: none">
+        <div class="section-title">当前已保存</div>
+        <p class="saved-line" id="usedVideo" style="display: none"></p>
+        <p class="saved-line" id="usedAudio" style="display: none"></p>
+        <p class="saved-line" id="usedUsb" style="display: none"></p>
+    </div>
 
-        <br>
-        <button type="button" class="confirm-button" onclick="authUsb()">点我授权键鼠控制器</button>
-        <br>
-        <div class="separator"></div>
-        <button type="button" class="confirm-button" onclick="window.location.href='./index.html'">返回</button>
-        <button type="button" class="confirm-button" onclick="save()">保存</button>
-    </form>
-    <p id="usedVideo" style="display: none">当前使用的视频设备:</p>
-    <p id="usedAudio" style="display: none">当前使用的音频设备:</p>
-    <p id="usedUsb" style="display: none">当前使用的控制器:</p>
+    <div class="section">
+        <div class="actions">
+            <button type="button" class="confirm-button" onclick="window.location.href='./index.html'">返回控制页</button>
+            <button type="button" class="confirm-button primary" onclick="save()">保存</button>
+        </div>
+    </div>
 </div>
-</body>
 <script src="ch9329.js"></script>
 <script>
     async function authUsb() {
@@ -457,18 +619,25 @@
             return;
         }
         let settings = migrateSettings(JSON.parse(settingStr));
-        let video = settings.video;
-        if (video) {
-            document.querySelector("#usedVideo").innerText = "当前使用的视频设备:\n" + video.label;
+        // 下拉框列的是「能选什么」，这里列的是「实际存了什么」，两者不一定一致
+        let shown = 0;
+        shown += showSavedLine("#usedVideo", "视频", settings.video);
+        shown += showSavedLine("#usedAudio", "音频", settings.audio);
+        shown += showSavedLine("#usedUsb", "控制器", settings.usb);
+        if (shown > 0) {
+            document.querySelector("#savedSection").style.display = "block";
         }
-        let audio = settings.audio;
-        if (audio) {
-            document.querySelector("#usedAudio").innerText = "当前使用的音频设备:\n" + audio.label;
+    }
+
+    function showSavedLine(selector, name, device) {
+        if (!device || !device.label) {
+            return 0;
         }
-        let usb = settings.usb;
-        if (usb) {
-            document.querySelector("#usedUsb").innerText = "当前使用的控制器:\n" + usb.label;
-        }
+        let element = document.querySelector(selector);
+        element.innerHTML = name + "：<span></span>";
+        element.querySelector("span").innerText = device.label;
+        element.style.display = "block";
+        return 1;
     }
 
     renderMedia();
@@ -496,4 +665,5 @@
         }
     })();
 </script>
+</body>
 </html>
