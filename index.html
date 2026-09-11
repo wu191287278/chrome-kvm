@@ -56,6 +56,28 @@
         background-color: #777;
     }
 
+    /* 连接状态指示：灰=未连接，绿=正常，黄=可用但有问题，红=失败 */
+    #statusButton {
+        font-size: 20px;
+        line-height: 1;
+    }
+
+    #statusButton.status-idle {
+        color: #999;
+    }
+
+    #statusButton.status-ok {
+        color: #3ddc84;
+    }
+
+    #statusButton.status-warn {
+        color: #ffc107;
+    }
+
+    #statusButton.status-error {
+        color: #ff5252;
+    }
+
     /* 工具提示文字 */
     .tooltip {
         position: absolute;
@@ -114,6 +136,10 @@
     <button id="authSerial" style="display: none"></button>
 </div>
 <div class="floating-toolbar hidden">
+    <button onclick="refreshStatus()" id="statusButton" class="status-idle">
+        ●
+        <span class="tooltip" id="statusTooltip">未连接串口</span>
+    </button>
     <button onclick="toggleFullScreen()">
         🖥️
         <span class="tooltip">全屏</span>
@@ -292,6 +318,59 @@
         return null;
     }
 
+    let currentBaudRate = null;
+
+    function setStatus(level, lines) {
+        let button = document.querySelector("#statusButton");
+        let tooltip = document.querySelector("#statusTooltip");
+        if (!button || !tooltip) {
+            return;
+        }
+        button.className = "status-" + level;
+        tooltip.innerHTML = lines.join("<br>");
+    }
+
+    function renderStatus(info) {
+        if (!ch) {
+            setStatus("idle", ["未连接串口"]);
+            return;
+        }
+        let level = "ok";
+        let lines = [];
+        if (!info) {
+            level = "error";
+            lines.push("芯片无应答");
+        } else {
+            lines.push("固件 " + info.version);
+            lines.push(info.usbConnected ? "USB 已枚举" : "USB 未枚举");
+            if (!info.usbConnected) {
+                level = "warn";
+            }
+            if (info.asleep) {
+                lines.push("被控端已休眠");
+                level = "warn";
+            }
+            lines.push(info.capsLock ? "Caps Lock 开" : "Caps Lock 关");
+        }
+        if (!ch.isAckEnabled()) {
+            lines.push("已降级为只发不等");
+            level = level === "ok" ? "warn" : level;
+        }
+        if (currentBaudRate) {
+            lines.push(currentBaudRate + " bps");
+        }
+        lines.push("点击刷新");
+        setStatus(level, lines);
+    }
+
+    async function refreshStatus() {
+        if (!ch) {
+            renderStatus(null);
+            return;
+        }
+        renderStatus(await ch.getInfo());
+    }
+
     function candidateBaudRates() {
         let saved = null;
         try {
@@ -331,8 +410,10 @@
                 // 芯片实际波特率以探测结果为准，设置里的值只作为首选，避免配置不同步就连不上
                 let connection = await Ch9329.connect(port, candidateBaudRates(), mouseAbsolute);
                 ch = connection.ch;
+                currentBaudRate = connection.baudRate;
                 open();
                 let info = connection.info;
+                renderStatus(info);
                 if (!info) {
                     console.warn("CH9329 未应答 GET_INFO，命令将退化为不等应答发送");
                     return;
@@ -341,8 +422,6 @@
                 rememberBaudRate(connection.baudRate);
                 if (!info.usbConnected) {
                     alert("CH9329 的 USB 未被被控端枚举，请检查接到被控机的 USB 线。");
-                } else if (info.asleep) {
-                    alert("被控端 USB 处于休眠状态，需先唤醒目标机。");
                 }
             })
             .catch(function (e) {

@@ -689,6 +689,11 @@ function Ch9329(writer, mouseAbsolute, reader) {
         return {ok: true};
     }
 
+    // false 表示芯片持续无应答、已降级为只发不等
+    this.isAckEnabled = function () {
+        return !!reader && this._ackSupported;
+    }
+
     this.dispose = async function () {
         this._queue = [];
         try {
@@ -1030,11 +1035,12 @@ function Ch9329(writer, mouseAbsolute, reader) {
         this._downAbsY = point.y;
         this._buttonDownAt = Date.now();
         this._pressToken = (this._pressToken || 0) + 1;
-        this._clickArmed = true;
 
-        // 先强制松所有键，清掉被控端可能卡住的鼠标键/修饰键残留
+        // 先强制松所有键，清掉被控端可能卡住的鼠标键/修饰键残留；
+        // 它会清空 _clickArmed，所以死区标记必须在它之后再置位
         this.forceReleaseAllMouse();
 
+        this._clickArmed = true;
         this.clicked.command = buttons;
         if (mouseAbsolute) {
             this.sendAbsolutePacket(buttons, 0x00);
@@ -1085,6 +1091,11 @@ function Ch9329(writer, mouseAbsolute, reader) {
 }
 
 Ch9329.BAUD_RATES = [9600, 115200];
+
+// 浏览器里靠 <script> 全局引入；这里只是让 node 下的测试能 require
+if (typeof module !== "undefined" && module.exports) {
+    module.exports = Ch9329;
+}
 
 // 依次用候选波特率打开串口，取第一个能应答 GET_INFO 的；
 // 全部不应答时退回首选波特率，保持「只发不等」的可用状态
