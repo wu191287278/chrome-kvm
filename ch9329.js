@@ -825,7 +825,16 @@ Ch9329.connect = async function (port, baudRates, mouseAbsolute) {
     }
 
     await closePort();
-    await port.open({baudRate: baudRates[0]});
+    try {
+        await port.open({baudRate: baudRates[0]});
+    } catch (e) {
+        // 走到这里说明连端口都打不开，不是波特率的问题。attempts 里已经
+        // 逐个记好了，翻成一句能照着做的提示再抛，别把浏览器的生硬报错扔给用户
+        let error = new Error(Ch9329.explainConnectFailure(attempts));
+        error.attempts = attempts;
+        error.cause = e;
+        throw error;
+    }
     return {
         ch: new Ch9329(port.writable.getWriter(), mouseAbsolute, port.readable.getReader()),
         info: null,
@@ -850,6 +859,25 @@ Ch9329.describeAttempts = function (attempts) {
         }
         return a.baudRate + " 正常";
     }).join("；");
+}
+
+// 全部候选波特率都连不上时，说清到底卡在哪一步。
+// 「每个都打不开」和「打开了但没人应答」是两码事：前者是端口本身用不了，
+// 绝大多数时候是被另一个标签页占着；后者才是接线或芯片的问题。
+Ch9329.explainConnectFailure = function (attempts) {
+    let list = attempts || [];
+    let detail = Ch9329.describeAttempts(list);
+    let allOpenFailed = list.length > 0 && list.every(function (a) {
+        return a.outcome === "open-failed";
+    });
+    if (!allOpenFailed) {
+        return "连接 CH9329 失败。\n\n详细信息：" + detail;
+    }
+    return "打不开串口。\n\n"
+        + "串口是独占的，同一个设备同时只能被一个页面打开。请关掉其它开着本站的"
+        + "标签页（尤其是设置页），只留这一个，然后刷新重试。\n\n"
+        + "都关了还不行的话，把 CH9329 拔下来重插。\n\n"
+        + "详细信息：" + detail;
 }
 
 // ===== 查表常量：不可变，放在实例外面，避免每次 new 都重建 =====

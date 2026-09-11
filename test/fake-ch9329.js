@@ -177,8 +177,13 @@ function createFakePort(options) {
         readable: null,
         writable: null,
         open: async function (settings) {
-            openedAt = settings.baudRate;
             log.push("open@" + settings.baudRate);
+            // 模拟端口被别的标签页独占：Chrome 打不开时就是抛错，不是返回失败
+            if (options.failOpen) {
+                throw new Error(typeof options.failOpen === "string"
+                    ? options.failOpen : "Failed to open serial port.");
+            }
+            openedAt = settings.baudRate;
             chip = createFakeChip(Object.assign({}, options, {
                 silent: options.silent === true || openedAt !== chipBaudRate,
                 baudRate: chipBaudRate

@@ -100,6 +100,16 @@ function selectedSerialFilter() {
     return SettingsStore.parseUsbFilter(element.selectedOptions[0].value);
 }
 
+// 写波特率要自己开一次串口，用完必须关掉：端口是独占的，没释放的话这个
+// 标签页会一直占着它，控制页就打不开了。关不掉至少要吼一声，别静静地咽下去。
+async function releasePort(port) {
+    try {
+        await port.close();
+    } catch (e) {
+        console.warn("关闭串口失败。请刷新本页释放端口，否则控制页会连不上", e);
+    }
+}
+
 async function applyBaudRate() {
     let target = parseInt(document.querySelector("#choice6").value);
     let settings = SettingsStore.readOrEmpty();
@@ -124,10 +134,7 @@ async function applyBaudRate() {
     let connection = await Ch9329.connect(port, Ch9329.BAUD_RATES, true);
     if (!connection.info) {
         await connection.ch.dispose();
-        try {
-            await port.close();
-        } catch (e) {
-        }
+        await releasePort(port);
         let detail = Ch9329.describeAttempts(connection.attempts);
         console.warn("CH9329 波特率探测失败：", connection.attempts);
         alert("CH9329 没有应答，无法写入波特率。\n\n探测结果：" + detail
@@ -136,10 +143,7 @@ async function applyBaudRate() {
     }
     let result = await connection.ch.setBaudRate(target);
     await connection.ch.dispose();
-    try {
-        await port.close();
-    } catch (e) {
-    }
+    await releasePort(port);
     if (!result.ok) {
         alert("写入失败：" + result.reason);
         return;

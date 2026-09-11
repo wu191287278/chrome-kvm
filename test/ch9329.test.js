@@ -195,6 +195,69 @@ test("每条命令都等芯片应答", async function (t) {
     });
 });
 
+test("端口打不开时要说清原因", async function (t) {
+    await t.test("每个波特率都打不开就抛错，而不是假装连上了", async function () {
+        const fake = createFakePort({failOpen: true});
+        await assert.rejects(
+            () => Ch9329.connect(fake.port, [9600, 115200], true),
+            /打不开串口/
+        );
+    });
+
+    await t.test("提示里要点明端口独占，并给出可以照着做的动作", async function () {
+        const fake = createFakePort({failOpen: true});
+        let message = null;
+        try {
+            await Ch9329.connect(fake.port, [9600, 115200], true);
+        } catch (e) {
+            message = e.message;
+        }
+        assert.ok(message, "应该抛出错误");
+        assert.ok(message.indexOf("独占") !== -1, "要解释为什么打不开：" + message);
+        assert.ok(message.indexOf("标签页") !== -1, "要告诉用户关掉其它标签页：" + message);
+        // 原始报错也得留着，否则真遇到别的原因就没法排查了
+        assert.ok(message.indexOf("Failed to open serial port") !== -1, "要带上原始报错：" + message);
+    });
+
+    await t.test("错误上带着 attempts 和原始异常，方便排查", async function () {
+        const fake = createFakePort({failOpen: true});
+        try {
+            await Ch9329.connect(fake.port, [9600, 115200], true);
+            assert.fail("应该抛错");
+        } catch (e) {
+            assert.strictEqual(e.attempts.length, 2, "两个波特率都该有记录");
+            assert.ok(e.attempts.every((a) => a.outcome === "open-failed"));
+            assert.ok(e.cause, "要保留原始异常");
+        }
+    });
+
+    await t.test("打得开但芯片不应答，不能误报成端口被占用", async function () {
+        // 这种情况要退回「只发不等」的降级连接，不该抛错
+        const fake = createFakePort({silent: true});
+        const warn = console.warn;
+        console.warn = function () {
+        };
+        let connection;
+        try {
+            connection = await Ch9329.connect(fake.port, [9600, 115200], true);
+        } finally {
+            console.warn = warn;
+        }
+        assert.strictEqual(connection.info, null, "无应答时仍然给出降级连接");
+        assert.ok(connection.ch, "降级连接照样要能发命令");
+        await connection.ch.dispose();
+    });
+
+    await t.test("无应答的措辞不该提端口独占，免得把人带偏", function () {
+        const text = Ch9329.explainConnectFailure([
+            {baudRate: 9600, outcome: "no-reply"},
+            {baudRate: 115200, outcome: "no-reply"}
+        ]);
+        assert.ok(text.indexOf("独占") === -1, text);
+        assert.ok(text.indexOf("无应答") !== -1, text);
+    });
+});
+
 test("指针锁定下的相对移动", async function (t) {
     function newRelativeChip() {
         const chip = createFakeChip();
