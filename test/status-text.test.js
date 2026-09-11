@@ -177,6 +177,33 @@ test("键鼠状态文案", async (t) => {
     });
 });
 
+test("指针锁定文案", async (t) => {
+    const base = {connected: true, info: {version: "V1.3", usbConnected: true}, ackEnabled: true};
+
+    await t.test("相对模式没锁指针时告诉用户怎么锁", () => {
+        const lines = StatusText.describeSerial(
+            Object.assign({}, base, {mouseRelative: true, pointerLocked: false})).lines;
+        assert.ok(lines.some((l) => l.indexOf("点击画面锁定指针") !== -1), lines.join(" / "));
+    });
+
+    await t.test("锁上之后说明怎么退出，不然用户会以为鼠标卡死了", () => {
+        const lines = StatusText.describeSerial(
+            Object.assign({}, base, {mouseRelative: true, pointerLocked: true})).lines;
+        assert.ok(lines.some((l) => l.indexOf("已锁定") !== -1 && l.indexOf("Esc") !== -1), lines.join(" / "));
+    });
+
+    await t.test("绝对模式不提指针锁定：那是相对模式才需要的", () => {
+        const lines = StatusText.describeSerial(
+            Object.assign({}, base, {mouseRelative: false})).lines;
+        assert.ok(!lines.some((l) => l.indexOf("指针") !== -1), lines.join(" / "));
+    });
+
+    await t.test("串口没连上时不该提指针锁定", () => {
+        const lines = StatusText.describeSerial({connected: false, mouseRelative: true}).lines;
+        assert.deepStrictEqual(lines, ["未连接串口"]);
+    });
+});
+
 test("全屏与键盘锁定文案", async (t) => {
     await t.test("没全屏时提示进全屏能捕获系统键", () => {
         let status = StatusText.describeFullscreen({fullscreen: false, lockSupported: true});

@@ -43,7 +43,7 @@ var StatusText = (function () {
         return {level: level, lines: lines};
     }
 
-    // state: {connected, serialLost, info, ackEnabled, baudRate}
+    // state: {connected, serialLost, info, ackEnabled, baudRate, mouseRelative, pointerLocked}
     function describeSerial(state) {
         if (!state.connected) {
             return {level: "idle", lines: ["未连接串口"]};
@@ -78,6 +78,10 @@ var StatusText = (function () {
         }
         if (state.baudRate) {
             lines.push(state.baudRate + " bps");
+        }
+        // 相对模式没锁指针时，光标顶到屏幕边缘就走不动了，得让用户知道怎么解决
+        if (state.mouseRelative) {
+            lines.push(state.pointerLocked ? "指针已锁定（Esc 释放）" : "相对模式：点击画面锁定指针");
         }
 
         lines.push("点击刷新");

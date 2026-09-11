@@ -403,6 +403,11 @@ function Ch9329(writer, mouseAbsolute, reader) {
         return !!reader && this._ackSupported;
     }
 
+    // 页面靠它决定要不要开指针锁定：绝对模式需要真实光标坐标，锁了就没法用了
+    this.isMouseAbsolute = function () {
+        return !!mouseAbsolute;
+    }
+
     // false 表示串口已经写不进去了，后续命令直接丢弃而不是逐个抛错
     this.isConnected = function () {
         return !this._transportBroken;
@@ -681,6 +686,32 @@ function Ch9329(writer, mouseAbsolute, reader) {
         this.lastAbsY = point.y;
         // 队列只保留最新一个移动包，按键包不会被移动流淹没
         this.sendAbsolutePacket(this.clicked.command, 0x00, true);
+    }
+
+    // 指针锁定时浏览器直接给出位移，不用再按光标位置差分。锁定后光标不受
+    // 屏幕边界限制，正好补上相对模式最大的短板：本机光标顶到屏幕边缘后，
+    // clientX 不再变化，被控端光标就跟着卡在那边走不动了。
+    // 单包只能带 ±127，甩得特别快时超出的部分会被截掉。
+    this.mouseMoveBy = function (dx, dy) {
+        if (mouseAbsolute) {
+            return;
+        }
+        let rdx = this.clamp(Math.round(dx), -127, 127);
+        let rdy = this.clamp(Math.round(dy), -127, 127);
+        if (rdx === 0 && rdy === 0) {
+            return;
+        }
+        if (this.clicked.command !== 0x00 && this._clickArmed) {
+            this._clickArmed = false;
+        }
+        return this.sendRelativePacket(this.clicked.command, rdx, rdy, 0, true);
+    }
+
+    // 指针解锁后光标会重新出现，位置和锁定前不连续，下一次移动必须重新取
+    // 基准，否则那一下差分会把被控端光标甩出去一大段
+    this.resetRelativeOrigin = function () {
+        this._lastClientX = null;
+        this._lastClientY = null;
     }
 
     this.mouseButtonDown = function (videoEl, clientX, clientY, buttons) {

@@ -168,13 +168,18 @@ function refreshVideoStatus() {
     renderVideoStatus();
 }
 
+let lastInfo = null;
+
 function renderStatus(info) {
+    lastInfo = info;
     let status = StatusText.describeSerial({
         connected: !!ch,
         serialLost: serialLost,
         info: info,
         ackEnabled: !!ch && ch.isAckEnabled(),
-        baudRate: currentBaudRate
+        baudRate: currentBaudRate,
+        mouseRelative: !!ch && !ch.isMouseAbsolute(),
+        pointerLocked: document.pointerLockElement === videoElement
     });
     setStatus(status.level, status.lines);
 }
@@ -326,8 +331,54 @@ function open() {
         ch.mouseScroll(-notches);
     }, {passive: true});
 
+    // 相对模式下位移靠光标位置差分算，本机光标一顶到屏幕边缘就不再变化，
+    // 被控端光标也跟着走不动了。指针锁定把光标从边界里解放出来，并直接给
+    // movementX/movementY。绝对模式要的是真实坐标，锁上反而没法用。
+    function pointerLocked() {
+        return document.pointerLockElement === videoElement;
+    }
+
+    function lockPointer() {
+        if (!ch || ch.isMouseAbsolute() || pointerLocked()) {
+            return;
+        }
+        // unadjustedMovement 关掉本机的指针加速：被控端自己还会再加一层，
+        // 两层叠加会让鼠标很难控
+        let pending;
+        try {
+            pending = videoElement.requestPointerLock({unadjustedMovement: true});
+        } catch (e) {
+            pending = null;
+        }
+        if (!pending || !pending.catch) {
+            return;  // 老浏览器不返回 Promise，当作已经发起
+        }
+        pending.catch(function () {
+            // 有的平台不支持免加速，退回普通锁定也比不锁强
+            try {
+                videoElement.requestPointerLock();
+            } catch (e) {
+                console.warn("指针锁定失败，相对模式下光标到屏幕边缘会走不动", e);
+            }
+        });
+    }
+
+    document.addEventListener('pointerlockchange', function () {
+        if (ch) {
+            // 解锁多半是按了 Esc，这时鼠标键的抬起事件收不到，先清干净
+            ch.forceReleaseAllMouse();
+            // 光标重新出现的位置和锁定前不连续，下次移动要重新取差分基准
+            ch.resetRelativeOrigin();
+        }
+        renderStatus(lastInfo);
+    });
+
     videoElement.addEventListener('mousemove', (event) => {
         if (!ch) {
+            return;
+        }
+        if (pointerLocked()) {
+            ch.mouseMoveBy(event.movementX, event.movementY);
             return;
         }
         ch.mouseMove(videoElement, event.clientX, event.clientY);
@@ -350,6 +401,7 @@ function open() {
         if (buttons) {
             ch.mouseButtonDown(videoElement, event.clientX, event.clientY, buttons);
         }
+        lockPointer();
     });
     videoElement.addEventListener('contextmenu', (event) => {
         event.preventDefault();

@@ -195,6 +195,81 @@ test("每条命令都等芯片应答", async function (t) {
     });
 });
 
+test("指针锁定下的相对移动", async function (t) {
+    function newRelativeChip() {
+        const chip = createFakeChip();
+        return {chip: chip, ch: new Ch9329(chip.writer, false, chip.reader)};
+    }
+
+    await t.test("直接按浏览器给的位移下发，不再差分光标位置", async function () {
+        const {chip, ch} = newRelativeChip();
+        ch.mouseMoveBy(30, -20);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        const frame = framesOf(chip, 0x05)[0];
+        assert.ok(frame, "应该发出相对移动包");
+        assert.strictEqual(frame[7], 30, "dx 原样下发");
+        assert.strictEqual(frame[8], (-20) & 0xff, "dy 原样下发");
+    });
+
+    await t.test("第一次移动就能生效，不像差分那样要先丢一帧取基准", async function () {
+        const {chip, ch} = newRelativeChip();
+        // mouseMove 的第一帧只用来记基准，会被丢掉；指针锁定没有这个问题
+        ch.mouseMoveBy(10, 10);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        assert.strictEqual(framesOf(chip, 0x05).length, 1, "首帧不该被吞掉");
+    });
+
+    await t.test("单包超过 ±127 要截断，不能溢出成反方向", async function () {
+        const {chip, ch} = newRelativeChip();
+        ch.mouseMoveBy(400, -400);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        const frame = framesOf(chip, 0x05)[0];
+        assert.strictEqual(frame[7], 127, "正向截到 127");
+        assert.strictEqual(frame[8], (-127) & 0xff, "负向截到 -127");
+    });
+
+    await t.test("没动就不发包", async function () {
+        const {chip, ch} = newRelativeChip();
+        ch.mouseMoveBy(0, 0);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        assert.strictEqual(framesOf(chip, 0x05).length, 0, "零位移不该占用串口");
+    });
+
+    await t.test("绝对模式下什么也不做", async function () {
+        const {chip, ch} = newChip();
+        ch.mouseMoveBy(50, 50);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        assert.strictEqual(chip.state.raw.length, 0, "绝对模式要的是真实坐标，不该被位移干扰");
+    });
+
+    await t.test("isMouseAbsolute 如实反映模式，页面靠它决定要不要锁", function () {
+        assert.strictEqual(newChip().ch.isMouseAbsolute(), true);
+        assert.strictEqual(newRelativeChip().ch.isMouseAbsolute(), false);
+    });
+
+    await t.test("解锁后重新取基准，下一次移动不会跳一大段", async function () {
+        const {chip, ch} = newRelativeChip();
+        const video = fakeVideo(1920, 1080);
+        // 锁定前在左边，解锁后光标出现在别处
+        ch.mouseMove(video, 100, 100);
+        ch.mouseMove(video, 110, 100);
+        ch.resetRelativeOrigin();
+        await new Promise(function (r) { setTimeout(r, 30); });
+        const before = framesOf(chip, 0x05).length;
+
+        // 这一帧只该用来记新基准
+        ch.mouseMove(video, 900, 700);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        assert.strictEqual(framesOf(chip, 0x05).length, before, "重置后的首帧应只取基准，不发包");
+
+        ch.mouseMove(video, 905, 700);
+        await new Promise(function (r) { setTimeout(r, 30); });
+        const frame = framesOf(chip, 0x05)[before];
+        assert.ok(frame, "第二帧才开始真正移动");
+        assert.strictEqual(frame[7], 5, "位移应相对新基准，而不是锁定前的老位置");
+    });
+});
+
 test("拖拽死区", async function (t) {
     // 死区按客户端像素算，和被控端分辨率无关。绝对模式的鼠标包是 CMD 0x04
     const zone = Ch9329.DRAG_DEAD_ZONE_PX;
