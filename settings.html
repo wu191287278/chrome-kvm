@@ -111,10 +111,13 @@
         <select id="choice2" name="choice2">
         </select>
         <label for="choice5">鼠标按键模式</label>
-        <select id="choice5" name="choice2">
-            <option value="absolute">相对模式</option>
-            <option value="relative">绝对模式</option>
+        <select id="choice5" name="choice5">
+            <option value="absolute" selected>绝对模式</option>
+            <option value="relative">相对模式</option>
         </select>
+        <p id="mouseModeHint" style="font-size: 12px; color: #888; margin: 4px 0 0;">
+            桌面请用绝对模式；相对模式未完整支持（适合后续 BIOS 场景）
+        </p>
 
         <br>
         <button type="button" class="confirm-button" onclick="authUsb()">点我授权键鼠控制器</button>
@@ -141,6 +144,22 @@
             })
     }
 
+    function migrateSettings(settings) {
+        if (!settings) {
+            return settings;
+        }
+        // 旧版「绝对模式」实际写入 relative；无版本号时迁回 absolute。
+        // 已是 absolute 的配置（含修复后重存）保持不变。
+        if (!settings.mouseModeVersion) {
+            if (settings.mouseClickMode !== "absolute") {
+                settings.mouseClickMode = "absolute";
+            }
+            settings.mouseModeVersion = 1;
+            window.localStorage.setItem("settings", JSON.stringify(settings));
+        }
+        return settings;
+    }
+
     function renderMedia() {
         navigator.mediaDevices.enumerateDevices().then(devices => {
             let videoSelector = document.querySelector("#choice1");
@@ -148,7 +167,7 @@
             let settingsStr = window.localStorage.getItem("settings");
             let settings = {};
             if (settingsStr) {
-                settings = JSON.parse(settingsStr)
+                settings = migrateSettings(JSON.parse(settingsStr))
             }
 
 
@@ -184,10 +203,12 @@
             }
 
             let resolutionElement = document.querySelector("#choice4");
-            for (let i = 0; i < resolutionElement.options.length; i++) {
-                let option = resolutionElement.options[i];
-                if (option.value === settings.resolution.width + "x" + settings.resolution.height) {
-                    option.setAttribute("selected", "selected");
+            if (settings.resolution && settings.resolution.width && settings.resolution.height) {
+                for (let i = 0; i < resolutionElement.options.length; i++) {
+                    let option = resolutionElement.options[i];
+                    if (option.value === settings.resolution.width + "x" + settings.resolution.height) {
+                        option.setAttribute("selected", "selected");
+                    }
                 }
             }
 
@@ -199,17 +220,32 @@
         let settingsStr = window.localStorage.getItem("settings");
         let settings = {};
         if (settingsStr) {
-            settings = JSON.parse(settingsStr)
+            settings = migrateSettings(JSON.parse(settingsStr))
         }
         navigator.serial.getPorts()
             .then((ports) => {
                 let selector = document.querySelector("#choice2");
+                let saved = null;
+                if (settings.usb && settings.usb.deviceId) {
+                    try {
+                        saved = typeof settings.usb.deviceId === "string"
+                            ? JSON.parse(settings.usb.deviceId)
+                            : settings.usb.deviceId;
+                    } catch (e) {
+                        saved = null;
+                    }
+                }
                 for (let i = 0; i < ports.length; i++) {
                     let port = ports[i];
                     let info = port.getInfo();
                     let htmlOptionElement = document.createElement("option");
                     htmlOptionElement.setAttribute("value", JSON.stringify(info));
                     htmlOptionElement.innerText = "usbProductId=" + info.usbProductId + "," + "usbVendorId=" + info.usbVendorId;
+                    if (saved
+                        && saved.usbVendorId === info.usbVendorId
+                        && saved.usbProductId === info.usbProductId) {
+                        htmlOptionElement.setAttribute("selected", "selected");
+                    }
                     selector.appendChild(htmlOptionElement);
                 }
             })
@@ -268,10 +304,15 @@
         }
 
         let config = {
-            video: video, audio: audio, usb: usb, resolution: resolution, mouseClickMode: "relative"
+            video: video,
+            audio: audio,
+            usb: usb,
+            resolution: resolution,
+            mouseClickMode: "absolute",
+            mouseModeVersion: 1
         };
         let mouseClickMode = document.querySelector("#choice5");
-        if (mouseClickMode.value) {
+        if (mouseClickMode.value === "absolute" || mouseClickMode.value === "relative") {
             config.mouseClickMode = mouseClickMode.value;
         }
 
@@ -285,7 +326,7 @@
         if (!settingStr) {
             return;
         }
-        let settings = JSON.parse(settingStr);
+        let settings = migrateSettings(JSON.parse(settingStr));
         let video = settings.video;
         if (video) {
             document.querySelector("#usedVideo").innerText = "当前使用的视频设备:\n" + video.label;
@@ -303,5 +344,26 @@
     renderMedia();
     renderUsb();
     renderUsed();
+
+    (function clearServiceWorkerAndCaches() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations()
+                .then(function (registrations) {
+                    return Promise.all(registrations.map(function (registration) {
+                        return registration.unregister();
+                    }));
+                })
+                .catch(function () {});
+        }
+        if (typeof caches !== 'undefined' && caches.keys) {
+            caches.keys()
+                .then(function (keys) {
+                    return Promise.all(keys.map(function (key) {
+                        return caches.delete(key);
+                    }));
+                })
+                .catch(function () {});
+        }
+    })();
 </script>
 </html>

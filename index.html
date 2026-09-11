@@ -134,6 +134,14 @@
         ⚡️
         <span class="tooltip">Ctrl+Alt+Delete</span>
     </button>
+    <button onclick="pasteText()">
+        📋
+        <span class="tooltip">粘贴文本</span>
+    </button>
+    <button onclick="releaseAllInput()">
+        🔓
+        <span class="tooltip">强制松开所有键</span>
+    </button>
     <button onclick="window.location.reload()">
         ♻
         <span class="tooltip">刷新</span>
@@ -153,6 +161,22 @@
     let globalHeight = 1080;
     let ch;
 
+    function migrateSettings(settings) {
+        if (!settings) {
+            return settings;
+        }
+        // 旧版「绝对模式」实际写入 relative；无版本号时迁回 absolute。
+        // 已是 absolute 的配置（含修复后重存）保持不变。
+        if (!settings.mouseModeVersion) {
+            if (settings.mouseClickMode !== "absolute") {
+                settings.mouseClickMode = "absolute";
+            }
+            settings.mouseModeVersion = 1;
+            window.localStorage.setItem("settings", JSON.stringify(settings));
+        }
+        return settings;
+    }
+
     function start(devices) {
         let settingsStr = window.localStorage.getItem("settings");
         if (!settingsStr) {
@@ -160,56 +184,147 @@
             return;
         }
 
-        let settings = JSON.parse(settingsStr);
+        let settings = migrateSettings(JSON.parse(settingsStr));
         let video = settings.video;
-        if (!settings.video.deviceId) {
+        if (!settings.video || !settings.video.deviceId) {
             return;
         }
         let audio = undefined;
-        if (settings.audio.deviceId) {
+        if (settings.audio && settings.audio.deviceId) {
             audio = {
-                deviceId: settings.audio.deviceId,
-                advanced: [{echoCancellation: false}]
+                deviceId: {exact: settings.audio.deviceId},
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false
             }
         }
 
         let screen = settings.resolution;
         let width = globalWidth;
         let height = globalHeight;
-        if (screen) {
+        if (screen && screen.width && screen.height) {
             width = screen.width;
             height = screen.height;
         }
-        const constraints = {
-            audio: audio,
-            video: {deviceId: video.deviceId, width: {exact: width}, height: {exact: height}}
-        };
-        navigator.mediaDevices.getUserMedia(constraints).then(
-            stream => {
+
+        openMedia(video.deviceId, audio, width, height)
+            .then(stream => {
                 videoElement.srcObject = stream;
-            }
-        ).then(devices).catch(function (e) {
-            alert(e.message);
-        });
+                if (typeof devices === "function") {
+                    devices();
+                }
+            })
+            .catch(function (e) {
+                alert(e && e.message ? e.message : String(e));
+            });
 
-        if (settings.usb.deviceId) {
-            navigator.serial.getPorts(JSON.parse(settings.usb.deviceId))
-                .then(async function (ports) {
-                    if (ports.length === 0) {
-                        alert("未检测到输入设备,如果有相关设备.可以在授权页面进行授权")
-                    } else {
-                        let port = ports[0]
-                        await port.open({baudRate: 9600});
-                        let writer = await port.writable.getWriter();
-                        ch = new Ch9329(writer, settings.mouseClickMode === "relative");
-                        open();
-                    }
-                })
+        if (settings.usb && settings.usb.deviceId) {
+            openSerial(settings.usb.deviceId, settings.mouseClickMode);
         }
+    }
 
+    function openMedia(videoDeviceId, audio, width, height) {
+        // exact 分辨率极易 Overconstrained；按 ideal → 放宽 → 仅设备 回退
+        let attempts = [
+            {
+                audio: audio,
+                video: {
+                    deviceId: {exact: videoDeviceId},
+                    width: {ideal: width},
+                    height: {ideal: height}
+                }
+            },
+            {
+                audio: audio,
+                video: {
+                    deviceId: {exact: videoDeviceId},
+                    width: {ideal: width}
+                }
+            },
+            {
+                audio: audio,
+                video: {
+                    deviceId: {exact: videoDeviceId}
+                }
+            }
+        ];
+        let chain = Promise.reject(new Error("init"));
+        for (let i = 0; i < attempts.length; i++) {
+            (function (constraints) {
+                chain = chain.catch(function () {
+                    return navigator.mediaDevices.getUserMedia(constraints);
+                });
+            })(attempts[i]);
+        }
+        return chain;
+    }
+
+    function parseUsbFilter(deviceId) {
+        if (!deviceId) {
+            return null;
+        }
+        if (typeof deviceId === "object") {
+            return deviceId;
+        }
+        try {
+            return JSON.parse(deviceId);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function pickSerialPort(ports, deviceId) {
+        if (!ports || ports.length === 0) {
+            return null;
+        }
+        let filter = parseUsbFilter(deviceId);
+        if (!filter || (filter.usbVendorId == null && filter.usbProductId == null)) {
+            return ports[0];
+        }
+        for (let i = 0; i < ports.length; i++) {
+            let info = ports[i].getInfo();
+            let vendorOk = filter.usbVendorId == null || info.usbVendorId === filter.usbVendorId;
+            let productOk = filter.usbProductId == null || info.usbProductId === filter.usbProductId;
+            if (vendorOk && productOk) {
+                return ports[i];
+            }
+        }
+        return null;
+    }
+
+    function openSerial(deviceId, mouseClickMode) {
+        navigator.serial.getPorts()
+            .then(async function (ports) {
+                let port = pickSerialPort(ports, deviceId);
+                if (!port) {
+                    alert("未检测到所选串口设备。请到设置页重新授权并选择正确的 CH9329 端口。");
+                    return;
+                }
+                if (port.readable || port.writable) {
+                    // 已打开则先跳过重复 open；部分浏览器重复 open 会抛错
+                    try {
+                        await port.close();
+                    } catch (e) {
+                    }
+                }
+                await port.open({baudRate: 9600});
+                let writer = port.writable.getWriter();
+                let reader = port.readable.getReader();
+                let mouseAbsolute = !mouseClickMode || mouseClickMode === "absolute";
+                ch = new Ch9329(writer, mouseAbsolute, reader);
+                open();
+            })
+            .catch(function (e) {
+                alert(e && e.message ? e.message : String(e));
+            });
     }
 
     function open() {
+        if (window.__chromeKvmInputBound) {
+            return;
+        }
+        window.__chromeKvmInputBound = true;
+
         videoElement.style.cursor = "none";
         document.addEventListener('keydown', (event) => {
             event.preventDefault()
@@ -234,36 +349,45 @@
         }, 100)
 
         videoElement.addEventListener('mousemove', (event) => {
-            let screenWidth = videoElement.videoWidth;
-            let screenHeight = videoElement.videoHeight;
-            let videoWidth = videoElement.offsetWidth;
-            let videoHeight = videoElement.offsetHeight;
-            ch.mouseMove(screenWidth, screenHeight, videoWidth, videoHeight, event.x, event.y);
+            ch.mouseMove(videoElement, event.clientX, event.clientY);
         });
 
 
         videoElement.addEventListener('mousedown', (event) => {
             event.preventDefault();
-            let screenWidth = videoElement.videoWidth;
-            let screenHeight = videoElement.videoHeight;
-            let videoWidth = videoElement.offsetWidth;
-            let videoHeight = videoElement.offsetHeight;
-            if (event.button === 0) { // 标准属性或兼容性属性
-                ch.mouseClickLeft(screenWidth, screenHeight, videoWidth, videoHeight, event.clientX, event.clientY);
+            let buttons = 0x00;
+            if (event.button === 0) {
+                buttons = 0x01;
+            } else if (event.button === 1) {
+                buttons = 0x04;
+            } else if (event.button === 2) {
+                buttons = 0x02;
             }
-            if (event.button === 1) { // 标准属性或兼容性属性
-                ch.mouseClickMiddle(screenWidth, screenHeight, videoWidth, videoHeight, event.clientX, event.clientY);
-            }
-            if (event.button === 2) { // 标准属性或兼容性属性
-                ch.mouseClickRight(screenWidth, screenHeight, videoWidth, videoHeight, event.clientX, event.clientY);
+            if (buttons) {
+                ch.mouseButtonDown(videoElement, event.clientX, event.clientY, buttons);
             }
         });
         videoElement.addEventListener('contextmenu', (event) => {
             event.preventDefault();
         });
-        videoElement.addEventListener('mouseup', (event) => {
-            event.preventDefault();
-            ch.mouseup();
+        // 用 document 捕获，避免移出 video 时丢右键抬起；按 button 位释放
+        document.addEventListener('mouseup', (event) => {
+            if (!ch) {
+                return;
+            }
+            ch.mouseButtonUp(event.button);
+        });
+
+        // 失焦/切走页面时强制松开所有键，防止被控端卡住
+        window.addEventListener('blur', () => {
+            if (ch) {
+                ch.forceReleaseAllInput();
+            }
+        });
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && ch) {
+                ch.forceReleaseAllInput();
+            }
         });
 
     }
@@ -344,31 +468,64 @@
         document.querySelector("#stopRecordStatus").style.display = "none";
     }
 
+    async function pasteText() {
+        if (!ch) {
+            alert("键鼠设备未连接");
+            return;
+        }
+        try {
+            let text = await navigator.clipboard.readText();
+            if (!text) {
+                alert("剪贴板为空");
+                return;
+            }
+            let result = await ch.typeText(text);
+            if (result.skipped > 0) {
+                alert("已粘贴 " + result.typed + " 个字符，跳过 " + result.skipped + " 个不支持字符（如中文）");
+            }
+        } catch (e) {
+            alert("读取剪贴板失败：请先允许剪贴板权限，或确认页面在安全上下文中打开");
+        }
+    }
+
     function paste() {
-        navigator.clipboard.readText()
-            .then(text => {
-                for (let lengthKey in text.length) {
-                    ch.keydown(lengthKey);
-                }
-                ch.keyup(lengthKey);
-            })
+        pasteText();
     }
 
     function ctrlAltDel() {
-        ch.write(new Uint8Array([87, 171, 0, 2, 8, 4, 0, 224, 226, 76, 0, 0, 0, 30]));
-        setTimeout(function () {
-            ch.keyup()
-        }, 10);
+        if (!ch) {
+            return;
+        }
+        ch.sendCtrlAltDelete();
     }
 
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./service-worker.js')
-            .then((registration) => {
-                console.log('Service Worker registered with scope:', registration.scope);
-            })
-            .catch((error) => {
-                console.log('Service Worker registration failed:', error);
-            });
+    function releaseAllInput() {
+        if (!ch) {
+            return;
+        }
+        ch.forceReleaseAllInput();
     }
+
+    // 卸载 Service Worker 并清空 Cache Storage，不再使用 SW 缓存
+    (function clearServiceWorkerAndCaches() {
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations()
+                .then(function (registrations) {
+                    return Promise.all(registrations.map(function (registration) {
+                        return registration.unregister();
+                    }));
+                })
+                .catch(function () {});
+        }
+        if (typeof caches !== 'undefined' && caches.keys) {
+            caches.keys()
+                .then(function (keys) {
+                    return Promise.all(keys.map(function (key) {
+                        return caches.delete(key);
+                    }));
+                })
+                .catch(function () {});
+        }
+    })();
 </script>
 </html>
