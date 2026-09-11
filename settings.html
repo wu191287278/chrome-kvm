@@ -311,6 +311,7 @@
         </div>
     </div>
 </div>
+<script src="settings-store.js"></script>
 <script src="ch9329.js"></script>
 <script>
     async function authUsb() {
@@ -323,22 +324,6 @@
             .then((stream) => {
                 window.location.reload();
             })
-    }
-
-    function migrateSettings(settings) {
-        if (!settings) {
-            return settings;
-        }
-        // 旧版「绝对模式」实际写入 relative；无版本号时迁回 absolute。
-        // 已是 absolute 的配置（含修复后重存）保持不变。
-        if (!settings.mouseModeVersion) {
-            if (settings.mouseClickMode !== "absolute") {
-                settings.mouseClickMode = "absolute";
-            }
-            settings.mouseModeVersion = 1;
-            window.localStorage.setItem("settings", JSON.stringify(settings));
-        }
-        return settings;
     }
 
     // 内置摄像头/麦克风一般不是采集卡，默认收起来减少干扰。
@@ -388,12 +373,7 @@
         navigator.mediaDevices.enumerateDevices().then(devices => {
             let videoSelector = document.querySelector("#choice1");
             let audioSelector = document.querySelector("#choice3");
-            let settingsStr = window.localStorage.getItem("settings");
-            let settings = {};
-            if (settingsStr) {
-                settings = migrateSettings(JSON.parse(settingsStr))
-            }
-
+            let settings = SettingsStore.readOrEmpty();
 
             let savedVideo = settings.video && settings.video.deviceId;
             let savedAudio = settings.audio && settings.audio.deviceId;
@@ -414,25 +394,11 @@
     }
 
     function renderUsb() {
-
-        let settingsStr = window.localStorage.getItem("settings");
-        let settings = {};
-        if (settingsStr) {
-            settings = migrateSettings(JSON.parse(settingsStr))
-        }
+        let settings = SettingsStore.readOrEmpty();
         navigator.serial.getPorts()
             .then((ports) => {
                 let selector = document.querySelector("#choice2");
-                let saved = null;
-                if (settings.usb && settings.usb.deviceId) {
-                    try {
-                        saved = typeof settings.usb.deviceId === "string"
-                            ? JSON.parse(settings.usb.deviceId)
-                            : settings.usb.deviceId;
-                    } catch (e) {
-                        saved = null;
-                    }
-                }
+                let saved = SettingsStore.savedUsbFilter(settings);
                 for (let i = 0; i < ports.length; i++) {
                     let port = ports[i];
                     let info = port.getInfo();
@@ -470,56 +436,26 @@
         }
     }
 
-    function savedSerialFilter(settings) {
-        if (!settings.usb || !settings.usb.deviceId) {
-            return null;
-        }
-        try {
-            return typeof settings.usb.deviceId === "string"
-                ? JSON.parse(settings.usb.deviceId)
-                : settings.usb.deviceId;
-        } catch (e) {
-            return null;
-        }
-    }
-
     // 下拉框里当前选中的端口优先：用户可能刚选好还没点保存
     function selectedSerialFilter() {
         let element = document.querySelector("#choice2");
         if (!element || element.selectedOptions.length === 0) {
             return null;
         }
-        try {
-            return JSON.parse(element.selectedOptions[0].value);
-        } catch (e) {
-            return null;
-        }
-    }
-
-    function matchPort(ports, filter) {
-        if (!filter) {
-            return null;
-        }
-        for (let i = 0; i < ports.length; i++) {
-            let info = ports[i].getInfo();
-            if (info.usbVendorId === filter.usbVendorId && info.usbProductId === filter.usbProductId) {
-                return ports[i];
-            }
-        }
-        return null;
+        return SettingsStore.parseUsbFilter(element.selectedOptions[0].value);
     }
 
     async function applyBaudRate() {
         let target = parseInt(document.querySelector("#choice6").value);
-        let settings = JSON.parse(window.localStorage.getItem("settings") || "{}");
+        let settings = SettingsStore.readOrEmpty();
         let ports = await navigator.serial.getPorts();
         if (ports.length === 0) {
-            alert("这个网址下还没有授权任何串口。请先点「点我授权键鼠控制器」。");
+            alert("这个网址下还没有授权任何串口。请先点「授权控制器」。");
             return;
         }
 
-        let filter = selectedSerialFilter() || savedSerialFilter(settings);
-        let port = matchPort(ports, filter);
+        let filter = selectedSerialFilter() || SettingsStore.savedUsbFilter(settings);
+        let port = SettingsStore.matchPort(ports, filter);
         if (!port) {
             if (ports.length === 1) {
                 port = ports[0];
@@ -554,8 +490,7 @@
             return;
         }
 
-        settings.baudRate = target;
-        window.localStorage.setItem("settings", JSON.stringify(settings));
+        SettingsStore.patch({baudRate: target});
         if (result.unchanged) {
             alert("芯片波特率已经是 " + target + "，无需改动。");
             return;
@@ -616,17 +551,19 @@
             config.mouseClickMode = mouseClickMode.value;
         }
 
-        window.localStorage.setItem("settings", JSON.stringify(config));
+        if (!SettingsStore.write(config)) {
+            alert("保存失败，浏览器可能禁用了本地存储");
+            return;
+        }
         alert("保存成功")
         window.location.reload();
     }
 
     function renderUsed() {
-        let settingStr = window.localStorage.getItem("settings");
-        if (!settingStr) {
+        let settings = SettingsStore.read();
+        if (!settings) {
             return;
         }
-        let settings = migrateSettings(JSON.parse(settingStr));
         // 下拉框列的是「能选什么」，这里列的是「实际存了什么」，两者不一定一致
         let shown = 0;
         shown += showSavedLine("#usedVideo", "视频", settings.video);

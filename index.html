@@ -335,6 +335,7 @@
     </button>
 </div>
 </body>
+<script src="settings-store.js"></script>
 <script src="ch9329.js"></script>
 <script>
 
@@ -344,30 +345,13 @@
     let globalHeight = 1080;
     let ch;
 
-    function migrateSettings(settings) {
-        if (!settings) {
-            return settings;
-        }
-        // 旧版「绝对模式」实际写入 relative；无版本号时迁回 absolute。
-        // 已是 absolute 的配置（含修复后重存）保持不变。
-        if (!settings.mouseModeVersion) {
-            if (settings.mouseClickMode !== "absolute") {
-                settings.mouseClickMode = "absolute";
-            }
-            settings.mouseModeVersion = 1;
-            window.localStorage.setItem("settings", JSON.stringify(settings));
-        }
-        return settings;
-    }
-
     function start(devices) {
-        let settingsStr = window.localStorage.getItem("settings");
-        if (!settingsStr) {
+        let settings = SettingsStore.read();
+        if (!settings) {
             window.location.href = "settings.html";
             return;
         }
 
-        let settings = migrateSettings(JSON.parse(settingsStr));
         let video = settings.video;
         if (!settings.video || !settings.video.deviceId) {
             return;
@@ -476,40 +460,6 @@
             })(attempts[i]);
         }
         return chain;
-    }
-
-    function parseUsbFilter(deviceId) {
-        if (!deviceId) {
-            return null;
-        }
-        if (typeof deviceId === "object") {
-            return deviceId;
-        }
-        try {
-            return JSON.parse(deviceId);
-        } catch (e) {
-            return null;
-        }
-    }
-
-    function pickSerialPort(ports, deviceId) {
-        if (!ports || ports.length === 0) {
-            return null;
-        }
-        let filter = parseUsbFilter(deviceId);
-        if (!filter || (filter.usbVendorId == null && filter.usbProductId == null)) {
-            // 没有可用的筛选条件时只在唯一端口下自动选，否则宁可报错也不要开错设备
-            return ports.length === 1 ? ports[0] : null;
-        }
-        for (let i = 0; i < ports.length; i++) {
-            let info = ports[i].getInfo();
-            let vendorOk = filter.usbVendorId == null || info.usbVendorId === filter.usbVendorId;
-            let productOk = filter.usbProductId == null || info.usbProductId === filter.usbProductId;
-            if (vendorOk && productOk) {
-                return ports[i];
-            }
-        }
-        return null;
     }
 
     let currentBaudRate = null;
@@ -671,30 +621,7 @@
     }
 
     function candidateBaudRates() {
-        let saved = null;
-        try {
-            let settings = JSON.parse(window.localStorage.getItem("settings") || "{}");
-            saved = settings.baudRate;
-        } catch (e) {
-        }
-        let list = Ch9329.BAUD_RATES.slice();
-        if (saved && list.indexOf(saved) !== -1) {
-            list.splice(list.indexOf(saved), 1);
-            list.unshift(saved);
-        }
-        return list;
-    }
-
-    function rememberBaudRate(baudRate) {
-        try {
-            let settings = JSON.parse(window.localStorage.getItem("settings") || "{}");
-            if (settings.baudRate === baudRate) {
-                return;
-            }
-            settings.baudRate = baudRate;
-            window.localStorage.setItem("settings", JSON.stringify(settings));
-        } catch (e) {
-        }
+        return SettingsStore.baudRateOrder(SettingsStore.readOrEmpty().baudRate, Ch9329.BAUD_RATES);
     }
 
     function openSerial(deviceId, mouseClickMode) {
@@ -702,7 +629,7 @@
         bindSerialLifecycle();
         navigator.serial.getPorts()
             .then(async function (ports) {
-                let port = pickSerialPort(ports, deviceId);
+                let port = SettingsStore.pickSerialPort(ports, deviceId);
                 if (!port) {
                     // 重连途中设备还没回来是正常的，别拿弹窗打断用户
                     if (serialLost) {
@@ -728,7 +655,7 @@
                     return;
                 }
                 console.log("CH9329", info, "baudRate=" + connection.baudRate);
-                rememberBaudRate(connection.baudRate);
+                SettingsStore.patch({baudRate: connection.baudRate});
                 if (!info.usbConnected) {
                     alert("CH9329 的 USB 未被被控端枚举，请检查接到被控机的 USB 线。");
                 }
