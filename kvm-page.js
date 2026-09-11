@@ -124,6 +124,8 @@ function openMedia(videoDeviceId, audio, width, height) {
 }
 
 let currentBaudRate = null;
+// 探测失败时上面那个值只是兜底选的，界面要如实标出来
+let currentBaudProbed = true;
 let activePort = null;
 let lastSerialArgs = null;
 let serialLost = false;
@@ -178,6 +180,7 @@ function renderStatus(info) {
         info: info,
         ackEnabled: !!ch && ch.isAckEnabled(),
         baudRate: currentBaudRate,
+        baudProbed: currentBaudProbed,
         mouseRelative: !!ch && !ch.isMouseAbsolute(),
         pointerLocked: document.pointerLockElement === videoElement
     });
@@ -262,6 +265,7 @@ function openSerial(deviceId, mouseClickMode) {
             activePort = port;
             serialLost = false;
             currentBaudRate = connection.baudRate;
+            currentBaudProbed = connection.probed !== false;
             open();
             let info = connection.info;
             renderStatus(info);

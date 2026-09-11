@@ -177,6 +177,29 @@ test("键鼠状态文案", async (t) => {
     });
 });
 
+test("波特率没探测成功时不能说得像确认过", async (t) => {
+    await t.test("探测失败要标未确认，否则会被当成「连上了但芯片哑巴」", () => {
+        const lines = StatusText.describeSerial({
+            connected: true, info: null, baudRate: 115200, baudProbed: false
+        }).lines;
+        assert.ok(lines.some((l) => l.indexOf("未确认") !== -1), lines.join(" / "));
+    });
+
+    await t.test("探测成功就照常显示，不要多余的括号", () => {
+        const lines = StatusText.describeSerial({
+            connected: true, info: {version: "V1.3", usbConnected: true},
+            baudRate: 115200, baudProbed: true
+        }).lines;
+        assert.ok(lines.indexOf("115200 bps") !== -1, lines.join(" / "));
+    });
+
+    await t.test("无应答时要给出下一步查什么，光说无应答没用", () => {
+        const lines = StatusText.describeSerial({connected: true, info: null}).lines;
+        assert.ok(lines.some((l) => l.indexOf("供电") !== -1), lines.join(" / "));
+        assert.ok(lines.some((l) => l.indexOf("端口") !== -1), lines.join(" / "));
+    });
+});
+
 test("指针锁定文案", async (t) => {
     const base = {connected: true, info: {version: "V1.3", usbConnected: true}, ackEnabled: true};
 

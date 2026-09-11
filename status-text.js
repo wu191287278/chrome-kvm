@@ -58,6 +58,9 @@ var StatusText = (function () {
         if (!info) {
             level = "error";
             lines.push("芯片无应答");
+            // 端口能打开却没人应答，最常见的是芯片没供电（到被控端那根 USB
+            // 没插好）或者选错了串口设备，光说「无应答」用户无从下手
+            lines.push("查 CH9329 供电和选中的端口");
         } else {
             lines.push("固件 " + info.version);
             lines.push(info.usbConnected ? "USB 已枚举" : "USB 未枚举");
@@ -77,7 +80,11 @@ var StatusText = (function () {
             level = level === "ok" ? "warn" : level;
         }
         if (state.baudRate) {
-            lines.push(state.baudRate + " bps");
+            // 没探测成功时这个值只是兜底用的，不能显示得像已经确认过——
+            // 否则看上去是「连上了 115200 但芯片哑巴」，实际是两个波特率都没人应
+            lines.push(state.baudProbed === false
+                ? state.baudRate + " bps（未确认）"
+                : state.baudRate + " bps");
         }
         // 相对模式没锁指针时，光标顶到屏幕边缘就走不动了，得让用户知道怎么解决
         if (state.mouseRelative) {
