@@ -195,6 +195,49 @@ test("每条命令都等芯片应答", async function (t) {
     });
 });
 
+test("不等应答时要留出包间隔", async function (t) {
+    // 协议：芯片超过 3ms 没收到下一个字节才认为本包结束。等应答时这个间隔
+    // 天然存在，不等应答时如果连发，芯片会把两包粘成一包。
+    await t.test("连发多包时每包之间都有间隔", async function () {
+        const chip = createFakeChip({silent: true});
+        // 没有 reader 就是「只发不等」模式
+        const ch = new Ch9329(chip.writer, true, null);
+        const started = Date.now();
+        await Promise.all([
+            ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x00])),
+            ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x00])),
+            ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x00]))
+        ]);
+        const spent = Date.now() - started;
+        assert.ok(spent >= Ch9329.PACKET_GAP_MS * 2,
+            "3 包之间至少要有 2 个间隔，实际只用了 " + spent + "ms");
+    });
+
+    await t.test("间隔可以调，调成 0 就退回连发", async function () {
+        const original = Ch9329.PACKET_GAP_MS;
+        try {
+            Ch9329.PACKET_GAP_MS = 0;
+            const chip = createFakeChip({silent: true});
+            const ch = new Ch9329(chip.writer, true, null);
+            const started = Date.now();
+            for (let i = 0; i < 5; i++) {
+                await ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x00]));
+            }
+            assert.ok(Date.now() - started < 40, "间隔归零后不该还在等");
+        } finally {
+            Ch9329.PACKET_GAP_MS = original;
+        }
+    });
+
+    await t.test("包还是照常发出去，间隔不能吃掉数据", async function () {
+        const chip = createFakeChip({silent: true});
+        const ch = new Ch9329(chip.writer, true, null);
+        await ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x00]));
+        await ch.write(ch.toUnit8Array([0x57, 0xAB, 0x00, 0x02, 0x00]));
+        assert.strictEqual(chip.state.raw.length, 2, "两包都要真的写出去");
+    });
+});
+
 test("端口打不开时要说清原因", async function (t) {
     await t.test("每个波特率都打不开就抛错，而不是假装连上了", async function () {
         const fake = createFakePort({failOpen: true});

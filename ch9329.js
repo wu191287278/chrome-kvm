@@ -210,6 +210,12 @@ function Ch9329(writer, mouseAbsolute, reader) {
     }
 
     // 发一条命令并等待应答；连续拿不到应答就降级为「只发不等」，避免每包都空等 500ms
+    this._sleep = function (ms) {
+        return new Promise(function (done) {
+            setTimeout(done, ms);
+        });
+    }
+
     this._transfer = async function (packet, retries) {
         let cmd = packet[3];
         let attempts = (retries == null ? 1 : retries) + 1;
@@ -230,6 +236,12 @@ function Ch9329(writer, mouseAbsolute, reader) {
                 return null;
             }
             if (!reader || !this._ackSupported) {
+                // 芯片靠 ≥3ms 的空闲间隔判断一包结束（协议里的「串口通信包间隔」，
+                // 默认 3ms）。等应答时这个间隔天然存在；不等应答时必须自己留出来，
+                // 否则连续的移动包会被粘成一包，芯片越解析越乱。
+                if (Ch9329.PACKET_GAP_MS > 0) {
+                    await this._sleep(Ch9329.PACKET_GAP_MS);
+                }
                 return null;
             }
             this._startReadLoop();
@@ -783,6 +795,10 @@ function Ch9329(writer, mouseAbsolute, reader) {
 // Windows 自己的拖拽阈值是 4px，这里略放宽一点，因为画面通常是缩放显示的。
 // 手感不对可以在控制台直接改，例如 Ch9329.DRAG_DEAD_ZONE_PX = 4
 Ch9329.DRAG_DEAD_ZONE_PX = 6;
+
+// 不等应答发送时，两包之间要留的空闲间隔。协议里芯片默认「超过 3ms 未收到
+// 下一个字节就算本包结束」，留不够包会被粘在一起。
+Ch9329.PACKET_GAP_MS = 4;
 
 Ch9329.BAUD_RATES = [9600, 115200];
 
