@@ -149,38 +149,13 @@ function setVideoStatus(level, lines) {
 }
 
 function renderVideoStatus() {
-    if (videoErrorLines) {
-        setVideoStatus("error", videoErrorLines);
-        return;
-    }
-    if (!videoTrack) {
-        setVideoStatus("idle", ["未打开视频", "点击重试"]);
-        return;
-    }
-    if (videoTrack.readyState === "ended") {
-        setVideoStatus("error", ["采集已中断", "采集卡可能被拔掉了", "点击重试"]);
-        return;
-    }
-    let level = "ok";
-    let lines = [];
-    let label = (videoTrack.label || "").trim();
-    // 采集卡的 label 就是设备名，但合成流会给一串随机 id，太长的就不显示了
-    lines.push(label && label.length <= 40 ? label : "视频采集");
-    if (videoTrack.muted) {
-        level = "warn";
-        lines.push("采集卡没有画面输入");
-    } else if (!videoElement.videoWidth) {
-        level = "warn";
-        lines.push("尚未收到画面");
-    } else {
-        let settings = videoTrack.getSettings();
-        lines.push(videoElement.videoWidth + "×" + videoElement.videoHeight);
-        if (settings.frameRate) {
-            lines.push(Math.round(settings.frameRate) + " fps");
-        }
-    }
-    lines.push("点击重开");
-    setVideoStatus(level, lines);
+    let status = StatusText.describeVideo({
+        errorLines: videoErrorLines,
+        track: videoTrack,
+        videoWidth: videoElement.videoWidth,
+        videoHeight: videoElement.videoHeight
+    });
+    setVideoStatus(status.level, status.lines);
 }
 
 function refreshVideoStatus() {
@@ -194,40 +169,14 @@ function refreshVideoStatus() {
 }
 
 function renderStatus(info) {
-    if (!ch) {
-        setStatus("idle", ["未连接串口"]);
-        return;
-    }
-    if (serialLost) {
-        setStatus("error", ["串口已断开", "插回 CH9329 后会自动重连", "或点此立即重试"]);
-        return;
-    }
-    let level = "ok";
-    let lines = [];
-    if (!info) {
-        level = "error";
-        lines.push("芯片无应答");
-    } else {
-        lines.push("固件 " + info.version);
-        lines.push(info.usbConnected ? "USB 已枚举" : "USB 未枚举");
-        if (!info.usbConnected) {
-            level = "warn";
-        }
-        if (info.asleep) {
-            lines.push("被控端已休眠");
-            level = "warn";
-        }
-        lines.push(info.capsLock ? "Caps Lock 开" : "Caps Lock 关");
-    }
-    if (!ch.isAckEnabled()) {
-        lines.push("已降级为只发不等");
-        level = level === "ok" ? "warn" : level;
-    }
-    if (currentBaudRate) {
-        lines.push(currentBaudRate + " bps");
-    }
-    lines.push("点击刷新");
-    setStatus(level, lines);
+    let status = StatusText.describeSerial({
+        connected: !!ch,
+        serialLost: serialLost,
+        info: info,
+        ackEnabled: !!ch && ch.isAckEnabled(),
+        baudRate: currentBaudRate
+    });
+    setStatus(status.level, status.lines);
 }
 
 async function refreshStatus() {
@@ -468,22 +417,6 @@ document.addEventListener('fullscreenchange', function () {
 
 let mediaRecorder;
 
-function recordFileName() {
-    let date = new Date();
-    let pad = function (value) {
-        return String(value).padStart(2, "0");
-    };
-    // getMonth 从 0 开始，getDate 才是几号（原来误用了 getDay，拿到的是星期几）
-    return date.getFullYear()
-        + pad(date.getMonth() + 1)
-        + pad(date.getDate())
-        + "-"
-        + pad(date.getHours())
-        + pad(date.getMinutes())
-        + pad(date.getSeconds())
-        + ".webm";
-}
-
 function startRecord() {
     document.querySelector("#startRecordStatus").style.display = "none";
     document.querySelector("#stopRecordStatus").style.display = "flex";
@@ -514,7 +447,7 @@ function startRecord() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = recordFileName();
+        a.download = StatusText.recordFileName();
         a.click();
         URL.revokeObjectURL(url);
     };

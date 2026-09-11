@@ -11,36 +11,6 @@ async function authMedia() {
         })
 }
 
-// 内置摄像头/麦克风一般不是采集卡，默认收起来减少干扰。
-// 注意中文 Windows 会把音频输入命名成「麦克风 (设备名)」，采集卡也可能中招
-const BUILTIN_HINTS = {
-    videoinput: ["facetime", "相机", "microsoft"],
-    audioinput: ["麦克风", "microsoft"]
-};
-
-function looksBuiltIn(device) {
-    let hints = BUILTIN_HINTS[device.kind] || [];
-    let label = (device.label || "").toLowerCase();
-    for (let i = 0; i < hints.length; i++) {
-        if (label.indexOf(hints[i]) !== -1) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// 过滤只是便利：已保存的设备一定保留，全被过滤光时退回完整列表，
-// 否则会出现「设置里引用的设备在下拉框里根本选不到」
-function devicesForKind(devices, kind, savedDeviceId) {
-    let all = devices.filter(function (device) {
-        return device.kind === kind;
-    });
-    let visible = all.filter(function (device) {
-        return !looksBuiltIn(device) || device.deviceId === savedDeviceId;
-    });
-    return visible.length ? visible : all;
-}
-
 function fillDeviceOptions(selector, list, savedDeviceId) {
     for (let i = 0; i < list.length; i++) {
         let device = list[i];
@@ -62,8 +32,8 @@ function renderMedia() {
 
         let savedVideo = settings.video && settings.video.deviceId;
         let savedAudio = settings.audio && settings.audio.deviceId;
-        fillDeviceOptions(videoSelector, devicesForKind(devices, "videoinput", savedVideo), savedVideo);
-        fillDeviceOptions(audioSelector, devicesForKind(devices, "audioinput", savedAudio), savedAudio);
+            fillDeviceOptions(videoSelector, DeviceFilter.forKind(devices, "videoinput", savedVideo), savedVideo);
+            fillDeviceOptions(audioSelector, DeviceFilter.forKind(devices, "audioinput", savedAudio), savedAudio);
 
         let resolutionElement = document.querySelector("#choice4");
         if (settings.resolution && settings.resolution.width && settings.resolution.height) {
